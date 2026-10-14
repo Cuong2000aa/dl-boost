@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PulseDM — Download Manager Extension</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="preview.css" />
+  </head>
+  <body>
+    <div class="bg"></div>
+    <header class="nav">
+      <div class="brand">
+        <img src="../icons/icon48.png" alt="" width="40" height="40" />
+        <span>PulseDM</span>
+      </div>
+      <a class="cta" href="#install">Cài extension</a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Chrome / Edge · Manifest V3</p>
+        <h1>PulseDM</h1>
+        <p class="lede">
+          Extension quản lý tải kiểu IDM: nhiều kết nối, hàng đợi, tạm dừng, bắt link tệp ngay trong trình duyệt.
+        </p>
+        <div class="cta-row">
+          <a class="cta" href="#install">Xem cách cài</a>
+          <a class="ghost" href="#demo">Xem demo UI</a>
+        </div>
+      </section>
+
+      <section id="demo" class="demo">
+        <div class="demo-frame">
+          <aside>
+            <strong>PulseDM</strong>
+            <button class="on">Tất cả</button>
+            <button>Đang tải</button>
+            <button>Video</button>
+            <button>Nén</button>
+          </aside>
+          <div class="demo-main">
+            <div class="stats">
+              <div><em id="liveSpeed">12.4 MB/s</em><span>tốc độ tổng</span></div>
+              <div><em>2</em><span>đang chạy</span></div>
+              <div><em>1</em><span>hàng đợi</span></div>
+              <div><em>4</em><span>hoàn tất</span></div>
+            </div>
+            <div class="rows" id="rows"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="install" class="install">
+        <h2>Cài vào Chrome / Edge</h2>
+        <ol>
+          <li>Mở <code>chrome://extensions</code> (hoặc <code>edge://extensions</code>)</li>
+          <li>Bật <strong>Developer mode</strong></li>
+          <li>Chọn <strong>Load unpacked</strong> → trỏ vào thư mục gốc repo PulseDM</li>
+          <li>Ghim icon PulseDM → dán URL hoặc chuột phải link → “Tải bằng PulseDM”</li>
+        </ol>
+        <p class="note">
+          Lưu ý: extension không thay thế 100% IDM native (hook hệ thống, lịch phức tạp). Trong trình duyệt,
+          tăng tốc dựa trên HTTP Range + nhiều kết nối khi server hỗ trợ.
+        </p>
+      </section>
+    </main>
+
+    <script src="preview.js"></script>
+  </body>
+</html>

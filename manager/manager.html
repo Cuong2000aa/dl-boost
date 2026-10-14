@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PulseDM Manager</title>
+    <link rel="stylesheet" href="manager.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="side">
+        <div class="logo">
+          <img src="../icons/icon48.png" alt="" width="36" height="36" />
+          <div>
+            <strong>PulseDM</strong>
+            <span>Download Manager</span>
+          </div>
+        </div>
+        <nav id="cats" class="cats">
+          <button data-cat="all" class="active">Tất cả</button>
+          <button data-cat="downloading">Đang tải</button>
+          <button data-cat="completed">Hoàn tất</button>
+          <button data-cat="video">Video</button>
+          <button data-cat="audio">Audio</button>
+          <button data-cat="archive">Nén</button>
+          <button data-cat="document">Tài liệu</button>
+          <button data-cat="program">Chương trình</button>
+          <button data-cat="other">Khác</button>
+        </nav>
+        <div class="side-foot">
+          <label>
+            Kết nối / file
+            <input id="connInput" type="number" min="1" max="16" value="8" />
+          </label>
+          <label class="check">
+            <input id="captureToggle" type="checkbox" />
+            Bắt tải trình duyệt
+          </label>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="toolbar">
+          <form id="addForm" class="add">
+            <input id="urlInput" type="url" placeholder="Dán URL tệp…" required />
+            <button type="submit">Thêm tải</button>
+          </form>
+          <div class="toolbar-actions">
+            <button id="clearFinished" class="ghost">Xóa mục đã xong</button>
+          </div>
+        </header>
+
+        <section class="hero-stats" id="heroStats">
+          <div>
+            <em id="bigSpeed">0 B/s</em>
+            <span>tốc độ tổng</span>
+          </div>
+          <div>
+            <em id="bigActive">0</em>
+            <span>đang chạy</span>
+          </div>
+          <div>
+            <em id="bigQueued">0</em>
+            <span>trong hàng đợi</span>
+          </div>
+          <div>
+            <em id="bigDone">0</em>
+            <span>hoàn tất</span>
+          </div>
+        </section>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tên tệp</th>
+                <th>Tiến độ</th>
+                <th>Kích thước</th>
+                <th>Tốc độ</th>
+                <th>Trạng thái</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+          <p id="empty" class="empty">
+            Hàng đợi trống. Thêm URL, chuột phải → “Tải bằng PulseDM”, hoặc Alt+click liên kết tệp.
+          </p>
+        </div>
+      </main>
+    </div>
+    <script type="module" src="manager.js"></script>
+  </body>
+</html>

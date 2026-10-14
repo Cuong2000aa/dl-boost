@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PulseDM</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <img src="../icons/icon32.png" alt="" width="22" height="22" />
+        <span>PulseDM</span>
+      </div>
+      <button id="openManager" class="linkish" title="Mở cửa sổ quản lý">Manager</button>
+    </header>
+
+    <form id="addForm" class="add">
+      <input
+        id="urlInput"
+        type="url"
+        placeholder="Dán URL tệp để tải…"
+        autocomplete="off"
+        required
+      />
+      <button type="submit" id="addBtn">Tải</button>
+    </form>
+
+    <div id="stats" class="stats">
+      <span id="statActive">0 đang tải</span>
+      <span id="statSpeed">0 B/s</span>
+    </div>
+
+    <ul id="list" class="list" aria-live="polite"></ul>
+
+    <p id="empty" class="empty">Chưa có tải xuống. Dán URL hoặc Alt+click liên kết tệp.</p>
+
+    <footer class="foot">
+      <label class="toggle">
+        <input type="checkbox" id="captureToggle" />
+        Bắt tải của trình duyệt
+      </label>
+    </footer>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
