@@ -13,82 +13,111 @@
           <img src="../icons/icon48.png" alt="" width="36" height="36" />
           <div>
             <strong>PulseDM</strong>
-            <span>Download Manager</span>
+            <span>v2 · Download Manager</span>
           </div>
         </div>
-        <nav id="cats" class="cats">
-          <button data-cat="all" class="active">Tất cả</button>
-          <button data-cat="downloading">Đang tải</button>
-          <button data-cat="completed">Hoàn tất</button>
-          <button data-cat="video">Video</button>
-          <button data-cat="audio">Audio</button>
-          <button data-cat="archive">Nén</button>
-          <button data-cat="document">Tài liệu</button>
-          <button data-cat="program">Chương trình</button>
-          <button data-cat="other">Khác</button>
-        </nav>
+        <nav id="cats" class="cats"></nav>
         <div class="side-foot">
-          <label>
-            Kết nối / file
-            <input id="connInput" type="number" min="1" max="16" value="8" />
-          </label>
-          <label class="check">
-            <input id="captureToggle" type="checkbox" />
-            Bắt tải trình duyệt
-          </label>
+          <button type="button" id="openOptions" class="ghost block">Cài đặt</button>
+          <button type="button" id="exportBtn" class="ghost block">Xuất dữ liệu</button>
         </div>
       </aside>
 
       <main class="main">
         <header class="toolbar">
-          <form id="addForm" class="add">
-            <input id="urlInput" type="url" placeholder="Dán URL tệp…" required />
-            <button type="submit">Thêm tải</button>
-          </form>
+          <div class="tabs" id="tabs">
+            <button data-tab="downloads" class="active">Tải xuống</button>
+            <button data-tab="batch">Batch URL</button>
+            <button data-tab="history">Lịch sử</button>
+          </div>
           <div class="toolbar-actions">
-            <button id="clearFinished" class="ghost">Xóa mục đã xong</button>
+            <input id="search" type="search" placeholder="Tìm tên / URL…" />
+            <button id="clearFinished" class="ghost" type="button">Xóa đã xong</button>
           </div>
         </header>
 
         <section class="hero-stats" id="heroStats">
-          <div>
-            <em id="bigSpeed">0 B/s</em>
-            <span>tốc độ tổng</span>
-          </div>
-          <div>
-            <em id="bigActive">0</em>
-            <span>đang chạy</span>
-          </div>
-          <div>
-            <em id="bigQueued">0</em>
-            <span>trong hàng đợi</span>
-          </div>
-          <div>
-            <em id="bigDone">0</em>
-            <span>hoàn tất</span>
+          <div><em id="bigSpeed">0 B/s</em><span>tốc độ tổng</span></div>
+          <div><em id="bigActive">0</em><span>đang chạy</span></div>
+          <div><em id="bigQueued">0</em><span>hàng đợi</span></div>
+          <div><em id="bigDone">0</em><span>hoàn tất</span></div>
+        </section>
+
+        <section id="panel-downloads" class="panel">
+          <form id="addForm" class="add">
+            <input id="urlInput" type="url" placeholder="Dán URL tệp…" required />
+            <input id="scheduleInput" type="datetime-local" title="Lên lịch (optional)" />
+            <button type="submit">Thêm tải</button>
+          </form>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tên tệp</th>
+                  <th>Tiến độ</th>
+                  <th>Kích thước</th>
+                  <th>Tốc độ / ETA</th>
+                  <th>Ưu tiên</th>
+                  <th>Trạng thái</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+            <p id="empty" class="empty">
+              Hàng đợi trống. Thêm URL, chuột phải → “Tải bằng PulseDM”, Alt+click, hoặc Ctrl+Shift+Y trên trang.
+            </p>
           </div>
         </section>
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Tên tệp</th>
-                <th>Tiến độ</th>
-                <th>Kích thước</th>
-                <th>Tốc độ</th>
-                <th>Trạng thái</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="tbody"></tbody>
-          </table>
-          <p id="empty" class="empty">
-            Hàng đợi trống. Thêm URL, chuột phải → “Tải bằng PulseDM”, hoặc Alt+click liên kết tệp.
-          </p>
-        </div>
+        <section id="panel-batch" class="panel hidden">
+          <p class="hint">Dán nhiều URL (mỗi dòng một URL). Có thể lên lịch cùng một mốc thời gian.</p>
+          <textarea id="batchUrls" rows="12" placeholder="https://example.com/a.zip&#10;https://example.com/b.mp4"></textarea>
+          <div class="batch-row">
+            <input id="batchSchedule" type="datetime-local" />
+            <button id="batchAdd" type="button" class="primary">Thêm tất cả</button>
+            <button id="pasteClipboard" type="button" class="ghost">Dán từ clipboard</button>
+          </div>
+          <p id="batchResult" class="hint"></p>
+        </section>
+
+        <section id="panel-history" class="panel hidden">
+          <div class="toolbar-actions" style="margin-bottom: 12px">
+            <button id="clearHistory" type="button" class="ghost">Xóa lịch sử</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tên tệp</th>
+                  <th>Kích thước</th>
+                  <th>Hoàn tất</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="historyBody"></tbody>
+            </table>
+            <p id="historyEmpty" class="empty">Chưa có lịch sử.</p>
+          </div>
+        </section>
       </main>
     </div>
+
+    <dialog id="scheduleDialog">
+      <form method="dialog" id="scheduleForm">
+        <h3>Lên lịch tải</h3>
+        <input type="hidden" id="scheduleJobId" />
+        <label>
+          Thời điểm
+          <input type="datetime-local" id="scheduleWhen" required />
+        </label>
+        <div class="dlg-actions">
+          <button value="cancel" class="ghost">Hủy</button>
+          <button id="scheduleSave" value="default" class="primary">Lưu</button>
+        </div>
+      </form>
+    </dialog>
+
     <script type="module" src="manager.js"></script>
   </body>
 </html>

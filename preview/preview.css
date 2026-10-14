@@ -123,8 +123,42 @@ body {
   }
 }
 
+.features {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 clamp(20px, 5vw, 56px) 40px;
+}
+
+.features article {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--panel) 90%, black);
+}
+
+.features h3 {
+  margin: 0 0 8px;
+  font-family: Syne, sans-serif;
+  font-size: 1.05rem;
+  color: var(--accent);
+}
+
+.features p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
 .demo {
   padding: 0 clamp(20px, 5vw, 56px) 64px;
+}
+
+@media (max-width: 900px) {
+  .features {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .demo-frame {
@@ -238,6 +272,29 @@ body {
   background: linear-gradient(90deg, #2dd4bf, #38bdf8);
   width: 40%;
   transition: width 0.4s ease;
+}
+
+.mini-parts {
+  display: flex;
+  gap: 2px;
+  height: 6px;
+  margin-top: 6px;
+}
+
+.mini-parts i {
+  flex: 1;
+  background: #132337;
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+}
+
+.mini-parts i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: var(--w, 0%);
+  background: linear-gradient(90deg, #2dd4bf, #38bdf8);
 }
 
 .install {

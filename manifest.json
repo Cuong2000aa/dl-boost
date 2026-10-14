@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "PulseDM",
-  "description": "Trình quản lý tải xuống kiểu IDM — tăng tốc nhiều kết nối, tạm dừng/tiếp tục, hàng đợi.",
-  "version": "1.0.0",
+  "description": "Trình quản lý tải xuống kiểu IDM — đa kết nối, resume thật, lịch tải, grabber, hàng đợi ưu tiên.",
+  "version": "2.0.0",
   "action": {
     "default_popup": "popup/popup.html",
     "default_title": "PulseDM",
@@ -22,20 +22,40 @@
     "service_worker": "background/service-worker.js",
     "type": "module"
   },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
   "permissions": [
     "downloads",
-    "downloads.shelf",
+    "downloads.open",
     "storage",
     "contextMenus",
     "notifications",
     "alarms",
-    "tabs"
+    "tabs",
+    "clipboardRead"
   ],
   "host_permissions": ["<all_urls>"],
+  "commands": {
+    "open-manager": {
+      "suggested_key": {
+        "default": "Alt+Shift+D"
+      },
+      "description": "Mở PulseDM Manager"
+    },
+    "add-from-clipboard": {
+      "suggested_key": {
+        "default": "Alt+Shift+A"
+      },
+      "description": "Mở batch add trong Manager"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
       "js": ["content/content.js"],
+      "css": ["content/content.css"],
       "run_at": "document_idle",
       "all_frames": false
     }

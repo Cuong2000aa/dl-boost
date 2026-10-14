@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PulseDM — Download Manager Extension</title>
+    <title>PulseDM v2 — Download Manager Extension</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -24,15 +24,23 @@
 
     <main>
       <section class="hero">
-        <p class="eyebrow">Chrome / Edge · Manifest V3</p>
+        <p class="eyebrow">Chrome / Edge · Manifest V3 · v2.0</p>
         <h1>PulseDM</h1>
         <p class="lede">
-          Extension quản lý tải kiểu IDM: nhiều kết nối, hàng đợi, tạm dừng, bắt link tệp ngay trong trình duyệt.
+          Download manager kiểu IDM trong trình duyệt: đa kết nối, resume thật, lịch tải,
+          grabber, batch URL và hàng đợi ưu tiên.
         </p>
         <div class="cta-row">
           <a class="cta" href="#install">Xem cách cài</a>
-          <a class="ghost" href="#demo">Xem demo UI</a>
+          <a class="ghost" href="#features">Tính năng</a>
         </div>
+      </section>
+
+      <section id="features" class="features">
+        <article><h3>Đa kết nối</h3><p>Tăng tốc bằng HTTP Range, chỉnh 1–16 kết nối và giới hạn KB/s.</p></article>
+        <article><h3>Resume thật</h3><p>Segment lưu IndexedDB — pause rồi resume không tải lại từ đầu.</p></article>
+        <article><h3>Grabber</h3><p>Ctrl+Shift+Y, Alt+click, bắt download Chrome theo phần mở rộng.</p></article>
+        <article><h3>Lịch & batch</h3><p>Hẹn giờ từng file, dán hàng loạt URL, ưu tiên hàng đợi.</p></article>
       </section>
 
       <section id="demo" class="demo">
@@ -41,6 +49,7 @@
             <strong>PulseDM</strong>
             <button class="on">Tất cả</button>
             <button>Đang tải</button>
+            <button>Đã lên lịch</button>
             <button>Video</button>
             <button>Nén</button>
           </aside>
@@ -61,12 +70,11 @@
         <ol>
           <li>Mở <code>chrome://extensions</code> (hoặc <code>edge://extensions</code>)</li>
           <li>Bật <strong>Developer mode</strong></li>
-          <li>Chọn <strong>Load unpacked</strong> → trỏ vào thư mục gốc repo PulseDM</li>
-          <li>Ghim icon PulseDM → dán URL hoặc chuột phải link → “Tải bằng PulseDM”</li>
+          <li>Chọn <strong>Load unpacked</strong> → thư mục gốc PulseDM</li>
+          <li>Reload sau mỗi lần cập nhật code</li>
         </ol>
         <p class="note">
-          Lưu ý: extension không thay thế 100% IDM native (hook hệ thống, lịch phức tạp). Trong trình duyệt,
-          tăng tốc dựa trên HTTP Range + nhiều kết nối khi server hỗ trợ.
+          Preview này chỉ demo giao diện. Để tải file thật, cần load unpacked extension.
         </p>
       </section>
     </main>

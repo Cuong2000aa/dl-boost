@@ -1,54 +1,63 @@
-# PulseDM
+# PulseDM v2
 
-Extension Chrome/Edge kiểu **IDM**: quản lý tải xuống, tăng tốc nhiều kết nối (HTTP Range), hàng đợi, tạm dừng/tiếp tục, bắt link tệp trên trang.
+Extension Chrome/Edge kiểu **IDM**: tăng tốc đa kết nối, **pause/resume thật** (IndexedDB), lịch tải, grabber trang, hàng đợi ưu tiên, lịch sử, batch URL, bắt download trình duyệt.
 
-## Tính năng (slice đầu)
+## Tính năng
 
-- Thêm URL từ popup hoặc cửa sổ **Manager**
-- Chuột phải → **Tải bằng PulseDM** (link / ảnh / video / audio)
-- **Alt + click** liên kết tệp trên trang
-- Sniffer nhẹ khi trang có file media/archive/pdf…
-- Tăng tốc **đa kết nối** khi server hỗ trợ `Accept-Ranges`
-- Hàng đợi, pause / resume / hủy, phân loại theo loại file
-- Tuỳ chọn **bắt tải của trình duyệt** (tắt mặc định)
-
-## Giới hạn so với IDM bản native
-
-PulseDM chạy trong sandbox extension, không hook toàn hệ thống Windows như IDM. Resume sau pause tải lại từ đầu (chưa lưu segment ra đĩa). CORS / server không cho Range → tải 1 kết nối.
+| Nhóm | Chi tiết |
+|------|----------|
+| Tăng tốc | HTTP Range, 1–16 kết nối, giới hạn tốc độ (KB/s) |
+| Resume | Lưu từng segment vào IndexedDB — tạm dừng rồi tiếp tục không mất dữ liệu |
+| Hàng đợi | Ưu tiên, đồng thời tối đa, bỏ qua/thay URL trùng |
+| Lịch tải | Hẹn giờ từng file hoặc cả batch |
+| Grabber | Panel phát hiện tệp, `Ctrl+Shift+Y`, `Alt+click` link |
+| Bắt tải Chrome | Tuỳ chọn + lọc theo phần mở rộng / dung lượng tối thiểu |
+| Manager | Tìm kiếm, phân loại, mở file / hiện thư mục, xuất JSON |
+| Khác | Badge số tải đang chạy, thông báo, trang Options, phím tắt |
 
 ## Cài đặt
 
 1. Mở `chrome://extensions` hoặc `edge://extensions`
 2. Bật **Developer mode**
-3. **Load unpacked** → chọn thư mục gốc repo này (chứa `manifest.json`)
-4. Ghim icon **PulseDM**
+3. **Load unpacked** → chọn thư mục gốc (có `manifest.json`)
+4. Ghim **PulseDM**
 
-## Dùng nhanh
+Sau khi cập nhật code: bấm **Reload** trên card extension.
 
-1. Dán URL vào popup → **Tải**
-2. Hoặc chuột phải link → **Tải bằng PulseDM**
-3. Mở **Manager** để xem hàng đợi đầy đủ và chỉnh số kết nối (1–16)
+## Phím tắt
 
-## Xem trước UI (không cần load extension)
+| Phím | Việc |
+|------|------|
+| `Alt+Shift+D` | Mở Manager |
+| `Alt+Shift+A` | Mở tab Batch URL |
+| `Ctrl+Shift+Y` (trên trang web) | Mở grabber |
+| `Alt+click` link tệp | Thêm vào hàng đợi |
+
+## Xem trước UI
 
 ```bash
 python3 -m http.server 43127 --bind 127.0.0.1
 ```
 
-Mở [http://127.0.0.1:43127/preview/](http://127.0.0.1:43127/preview/)
+Mở http://127.0.0.1:43127/preview/
 
 ## Cấu trúc
 
 ```
-manifest.json
-background/service-worker.js   # hàng đợi + bắt download
-lib/download-engine.js         # probe + multi-connection
-popup/                         # popup nhanh
-manager/                       # cửa sổ quản lý
-content/content.js             # Alt+click + sniffer
-preview/                       # landing demo UI
+manifest.json                 # MV3
+background/service-worker.js  # hàng đợi, lịch, capture, badge
+lib/download-engine.js        # multi-connection + rate limit
+lib/idb.js                    # segment store (resume)
+lib/settings.js               # defaults
+popup/  manager/  options/    # UI
+content/                      # grabber + hotkeys
+preview/                      # landing demo
 ```
 
-## Quyền
+## Giới hạn so với IDM native
 
-`downloads`, `storage`, `contextMenus`, `notifications`, `tabs`, `host_permissions: <all_urls>` — cần để fetch Range và lưu file qua Chrome Downloads API.
+Không hook toàn hệ thống Windows/macOS. Một số CDN chặn Range / cookie phức tạp → fallback 1 kết nối. Chrome quyết định thư mục Downloads (extension không ghi path tuỳ ý như IDM).
+
+## Sao lưu
+
+Options → **Xuất JSON** / **Nhập JSON** (jobs + history + settings).

@@ -1,10 +1,11 @@
-import { formatBytes, formatSpeed } from "../lib/download-engine.js";
+import { formatBytes, formatSpeed, formatEta, escapeHtml } from "../lib/format.js";
 
 const listEl = document.getElementById("list");
 const emptyEl = document.getElementById("empty");
 const form = document.getElementById("addForm");
 const urlInput = document.getElementById("urlInput");
 const openManager = document.getElementById("openManager");
+const openOptions = document.getElementById("openOptions");
 const captureToggle = document.getElementById("captureToggle");
 const statActive = document.getElementById("statActive");
 const statSpeed = document.getElementById("statSpeed");
@@ -16,6 +17,7 @@ const statusLabel = {
   completed: "xong",
   error: "lỗi",
   cancelled: "hủy",
+  scheduled: "lịch",
 };
 
 function send(type, payload = {}) {
@@ -31,7 +33,11 @@ function render(jobs) {
   const show = jobs.slice(0, 8);
   listEl.innerHTML = show
     .map((j) => {
-      const pct = j.total ? Math.min(100, Math.round((j.loaded / j.total) * 100)) : 0;
+      const pct = j.total
+        ? Math.min(100, Math.round((j.loaded / j.total) * 100))
+        : j.status === "completed"
+          ? 100
+          : 0;
       return `
       <li class="item" data-id="${j.id}">
         <div class="item-top">
@@ -41,20 +47,26 @@ function render(jobs) {
         <div class="bar"><i style="width:${pct}%"></i></div>
         <div class="meta">
           <span>${formatBytes(j.loaded)}${j.total ? " / " + formatBytes(j.total) : ""}</span>
-          <span>${j.status === "downloading" ? formatSpeed(j.speed) : pct ? pct + "%" : ""}</span>
+          <span>${
+            j.status === "downloading"
+              ? formatSpeed(j.speed) + " · " + formatEta(j.eta)
+              : pct
+                ? pct + "%"
+                : ""
+          }</span>
         </div>
         <div class="actions">
           ${
             j.status === "downloading"
               ? `<button data-act="pause">Tạm dừng</button>`
-              : j.status === "paused" || j.status === "error" || j.status === "queued"
+              : ["paused", "error", "queued", "scheduled"].includes(j.status)
                 ? `<button data-act="resume">Tiếp tục</button>`
                 : ""
           }
           ${
-            j.status !== "completed" && j.status !== "cancelled"
+            !["completed", "cancelled"].includes(j.status)
               ? `<button data-act="cancel">Hủy</button>`
-              : ""
+              : `<button data-act="open">Mở</button>`
           }
           <button data-act="remove">Xóa</button>
         </div>
@@ -64,14 +76,6 @@ function render(jobs) {
     .join("");
 
   emptyEl.classList.toggle("hidden", jobs.length > 0);
-}
-
-function escapeHtml(s) {
-  return String(s || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }
 
 async function refresh() {
@@ -92,6 +96,27 @@ form.addEventListener("submit", async (e) => {
 });
 
 openManager.addEventListener("click", () => send("open-manager"));
+openOptions.addEventListener("click", () => send("open-options"));
+document.getElementById("batchBtn").addEventListener("click", () => {
+  send("open-manager", { hash: "batch" });
+});
+
+document.getElementById("pasteBtn").addEventListener("click", async () => {
+  try {
+    const text = (await navigator.clipboard.readText()).trim();
+    if (!text) return;
+    if (text.includes("\n")) {
+      const urls = text.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      await send("add-batch", { urls });
+    } else {
+      await send("add-download", { payload: { url: text } });
+    }
+    refresh();
+  } catch {
+    urlInput.focus();
+    urlInput.placeholder = "Dán URL vào đây…";
+  }
+});
 
 captureToggle.addEventListener("change", async () => {
   await send("save-settings", {
@@ -109,6 +134,7 @@ listEl.addEventListener("click", async (e) => {
   if (act === "resume") await send("resume", { id });
   if (act === "cancel") await send("cancel", { id });
   if (act === "remove") await send("remove", { id });
+  if (act === "open") await send("open-file", { id });
   refresh();
 });
 

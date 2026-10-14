@@ -12,7 +12,10 @@
         <img src="../icons/icon32.png" alt="" width="22" height="22" />
         <span>PulseDM</span>
       </div>
-      <button id="openManager" class="linkish" title="Mở cửa sổ quản lý">Manager</button>
+      <div class="top-links">
+        <button id="openManager" class="linkish" type="button">Manager</button>
+        <button id="openOptions" class="linkish" type="button">Cài đặt</button>
+      </div>
     </header>
 
     <form id="addForm" class="add">
@@ -26,14 +29,18 @@
       <button type="submit" id="addBtn">Tải</button>
     </form>
 
+    <div class="quick">
+      <button type="button" id="batchBtn" class="chip">Batch URL</button>
+      <button type="button" id="pasteBtn" class="chip">Dán & tải</button>
+    </div>
+
     <div id="stats" class="stats">
       <span id="statActive">0 đang tải</span>
       <span id="statSpeed">0 B/s</span>
     </div>
 
     <ul id="list" class="list" aria-live="polite"></ul>
-
-    <p id="empty" class="empty">Chưa có tải xuống. Dán URL hoặc Alt+click liên kết tệp.</p>
+    <p id="empty" class="empty">Chưa có tải xuống. Dán URL, Alt+click, hoặc Ctrl+Shift+Y trên trang.</p>
 
     <footer class="foot">
       <label class="toggle">

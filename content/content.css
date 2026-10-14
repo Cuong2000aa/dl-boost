@@ -1,0 +1,149 @@
+#pulsedm-root {
+  all: initial;
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483646;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: #e8eef7;
+}
+
+#pulsedm-root * {
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+#pulsedm-root .panel {
+  width: min(360px, calc(100vw - 28px));
+  background: #0b1726;
+  border: 1px solid #1a2f46;
+  border-radius: 14px;
+  box-shadow: 0 22px 50px rgba(2, 6, 23, 0.5);
+  overflow: hidden;
+  transform-origin: bottom right;
+  animation: pulsedm-in 0.28s ease both;
+}
+
+@keyframes pulsedm-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+#pulsedm-root .head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.12), transparent);
+  border-bottom: 1px solid #1a2f46;
+}
+
+#pulsedm-root .title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #2dd4bf;
+  letter-spacing: 0.02em;
+}
+
+#pulsedm-root .head button {
+  all: unset;
+  cursor: pointer;
+  color: #8ba0b8;
+  font-size: 12px;
+  padding: 4px 6px;
+}
+
+#pulsedm-root .body {
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px;
+}
+
+#pulsedm-root .item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+#pulsedm-root .item:hover {
+  background: #102033;
+  border-color: #1a2f46;
+}
+
+#pulsedm-root .name {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+#pulsedm-root .meta {
+  font-size: 11px;
+  color: #8ba0b8;
+  margin-top: 2px;
+}
+
+#pulsedm-root .dl {
+  all: unset;
+  cursor: pointer;
+  background: #14b8a6;
+  color: #042f2e;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+#pulsedm-root .foot {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  border-top: 1px solid #1a2f46;
+}
+
+#pulsedm-root .foot button {
+  all: unset;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 10px;
+  border-radius: 8px;
+}
+
+#pulsedm-root .primary {
+  background: #14b8a6;
+  color: #042f2e;
+}
+
+#pulsedm-root .ghost {
+  color: #8ba0b8;
+}
+
+#pulsedm-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 72px;
+  transform: translateX(-50%);
+  background: #0f172a;
+  color: #5eead4;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  z-index: 2147483647;
+  border: 1px solid #134e4a;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  animation: pulsedm-in 0.25s ease both;
+}

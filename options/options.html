@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PulseDM · Cài đặt</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <img src="../icons/icon48.png" alt="" width="36" height="36" />
+        <div>
+          <strong>PulseDM</strong>
+          <span>Cài đặt</span>
+        </div>
+      </div>
+      <button id="openManager" type="button" class="ghost">Mở Manager</button>
+    </header>
+
+    <main class="wrap">
+      <form id="form" class="grid">
+        <section>
+          <h2>Tăng tốc & hàng đợi</h2>
+          <label>
+            Số kết nối mỗi file (1–16)
+            <input name="connections" type="number" min="1" max="16" />
+          </label>
+          <label>
+            Tải đồng thời tối đa
+            <input name="maxConcurrent" type="number" min="1" max="10" />
+          </label>
+          <label>
+            Giới hạn tốc độ (KB/s, 0 = không giới hạn)
+            <input name="speedLimitKb" type="number" min="0" step="50" />
+          </label>
+          <label>
+            Trùng URL
+            <select name="duplicatePolicy">
+              <option value="skip">Bỏ qua (không thêm lại)</option>
+              <option value="allow">Cho phép trùng</option>
+              <option value="replace">Thay thế job cũ</option>
+            </select>
+          </label>
+        </section>
+
+        <section>
+          <h2>Bắt tải trình duyệt</h2>
+          <label class="check">
+            <input name="captureBrowserDownloads" type="checkbox" />
+            Bắt download của Chrome/Edge đưa vào PulseDM
+          </label>
+          <label>
+            Dung lượng tối thiểu (MB)
+            <input name="captureMinSizeMB" type="number" min="0" step="0.5" />
+          </label>
+          <label>
+            Phần mở rộng bắt (cách nhau bằng dấu phẩy)
+            <textarea name="captureExtensions" rows="3"></textarea>
+          </label>
+        </section>
+
+        <section>
+          <h2>Grabber trang</h2>
+          <label class="check">
+            <input name="snifferEnabled" type="checkbox" />
+            Bật sniffer / grabber
+          </label>
+          <label class="check">
+            <input name="snifferAutoShow" type="checkbox" />
+            Tự hiện panel khi phát hiện tệp
+          </label>
+          <p class="hint">Ctrl+Shift+Y trên trang để mở grabber. Alt+click link tệp để tải nhanh.</p>
+        </section>
+
+        <section>
+          <h2>Thông báo & khác</h2>
+          <label class="check">
+            <input name="showNotifications" type="checkbox" />
+            Thông báo khi tải xong
+          </label>
+          <label class="check">
+            <input name="autoOpenManagerOnAdd" type="checkbox" />
+            Tự mở Manager khi thêm tải
+          </label>
+        </section>
+
+        <section class="span2">
+          <h2>Sao lưu</h2>
+          <div class="row">
+            <button type="button" id="exportBtn" class="ghost">Xuất JSON</button>
+            <label class="filebtn ghost">
+              Nhập JSON
+              <input id="importFile" type="file" accept="application/json,.json" hidden />
+            </label>
+            <button type="button" id="resetBtn" class="danger">Khôi phục mặc định</button>
+          </div>
+        </section>
+
+        <div class="actions span2">
+          <button type="submit" class="primary">Lưu cài đặt</button>
+          <span id="saved" class="saved" hidden>Đã lưu</span>
+        </div>
+      </form>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>
