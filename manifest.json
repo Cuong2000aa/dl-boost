@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "PulseDM",
-  "description": "Trình quản lý tải xuống kiểu IDM — đa kết nối, resume thật, lịch tải, grabber, hàng đợi ưu tiên.",
-  "version": "2.0.0",
+  "description": "PulseDM — download manager + native helper (yt-dlp) kiểu IDM cho Edge/Chrome.",
+  "version": "2.3.2",
   "action": {
     "default_popup": "popup/popup.html",
     "default_title": "PulseDM",
@@ -34,19 +34,24 @@
     "notifications",
     "alarms",
     "tabs",
-    "clipboardRead"
+    "offscreen",
+    "clipboardRead",
+    "webRequest",
+    "nativeMessaging"
   ],
   "host_permissions": ["<all_urls>"],
   "commands": {
     "open-manager": {
       "suggested_key": {
-        "default": "Alt+Shift+D"
+        "default": "Alt+Shift+D",
+        "mac": "Alt+Shift+D"
       },
       "description": "Mở PulseDM Manager"
     },
     "add-from-clipboard": {
       "suggested_key": {
-        "default": "Alt+Shift+A"
+        "default": "Alt+Shift+A",
+        "mac": "Alt+Shift+A"
       },
       "description": "Mở batch add trong Manager"
     }

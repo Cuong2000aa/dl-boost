@@ -1,19 +1,25 @@
-# PulseDM v2
+# PulseDM v2.3.2
 
-Extension Chrome/Edge kiểu **IDM**: tăng tốc đa kết nối, **pause/resume thật** (IndexedDB), lịch tải, grabber trang, hàng đợi ưu tiên, lịch sử, batch URL, bắt download trình duyệt.
+Extension Edge/Chrome kiểu **IDM** + **Native Helper (Mac & Windows)**.
+
+- Trong browser: bắt media, HLS, đa kết nối, resume, grabber  
+- Ngoài browser: Helper gọi **yt-dlp** để tải YouTube/Facebook/…
+
+Xem cài Helper: [`native-host/README.md`](native-host/README.md)
+
+**Windows:** `.\native-host\install-win.ps1 -ExtensionId <ID>` (đã có `.exe`, **không cần Python**) rồi `winget install yt-dlp.yt-dlp`  
+**Mac:** `./native-host/install-mac.sh <ID>` rồi `brew install yt-dlp`
 
 ## Tính năng
 
 | Nhóm | Chi tiết |
 |------|----------|
+| Native Helper | App nhỏ Mac/Win + `yt-dlp` (YT/FB/…) → Downloads/PulseDM |
 | Tăng tốc | HTTP Range, 1–16 kết nối, giới hạn tốc độ (KB/s) |
-| Resume | Lưu từng segment vào IndexedDB — tạm dừng rồi tiếp tục không mất dữ liệu |
-| Hàng đợi | Ưu tiên, đồng thời tối đa, bỏ qua/thay URL trùng |
-| Lịch tải | Hẹn giờ từng file hoặc cả batch |
-| Grabber | Panel phát hiện tệp, `Ctrl+Shift+Y`, `Alt+click` link |
-| Bắt tải Chrome | Tuỳ chọn + lọc theo phần mở rộng / dung lượng tối thiểu |
-| Manager | Tìm kiếm, phân loại, mở file / hiện thư mục, xuất JSON |
-| Khác | Badge số tải đang chạy, thông báo, trang Options, phím tắt |
+| Resume | Segment IndexedDB + offscreen save |
+| Grabber | Network sniffer + `Cmd/Ctrl+Shift+Y` |
+| Hàng đợi / lịch | Ưu tiên, batch, schedule |
+| Manager | Tìm kiếm, phân loại, options, xuất JSON |
 
 ## Cài đặt
 

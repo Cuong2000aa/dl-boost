@@ -9,6 +9,7 @@ function send(type, payload = {}) {
 
 function fill(settings) {
   const s = { ...defaultSettings, ...settings };
+  form.downloadMode.value = s.downloadMode || "auto";
   form.connections.value = s.connections;
   form.maxConcurrent.value = s.maxConcurrent;
   form.speedLimitKb.value = Math.round((Number(s.speedLimit) || 0) / 1024);
@@ -17,13 +18,16 @@ function fill(settings) {
   form.captureMinSizeMB.value = s.captureMinSizeMB;
   form.captureExtensions.value = s.captureExtensions;
   form.snifferEnabled.checked = Boolean(s.snifferEnabled);
+  form.networkSnifferEnabled.checked = s.networkSnifferEnabled !== false;
   form.snifferAutoShow.checked = Boolean(s.snifferAutoShow);
+  form.useNativeHelper.checked = s.useNativeHelper !== false;
   form.showNotifications.checked = Boolean(s.showNotifications);
   form.autoOpenManagerOnAdd.checked = Boolean(s.autoOpenManagerOnAdd);
 }
 
 function readForm() {
   return {
+    downloadMode: form.downloadMode.value || "auto",
     connections: Math.max(1, Math.min(16, Number(form.connections.value) || 8)),
     maxConcurrent: Math.max(1, Math.min(10, Number(form.maxConcurrent.value) || 3)),
     speedLimit: Math.max(0, Number(form.speedLimitKb.value) || 0) * 1024,
@@ -32,7 +36,9 @@ function readForm() {
     captureMinSizeMB: Math.max(0, Number(form.captureMinSizeMB.value) || 0),
     captureExtensions: form.captureExtensions.value.trim(),
     snifferEnabled: form.snifferEnabled.checked,
+    networkSnifferEnabled: form.networkSnifferEnabled.checked,
     snifferAutoShow: form.snifferAutoShow.checked,
+    useNativeHelper: form.useNativeHelper.checked,
     showNotifications: form.showNotifications.checked,
     autoOpenManagerOnAdd: form.autoOpenManagerOnAdd.checked,
   };
@@ -79,3 +85,15 @@ document.getElementById("importFile").addEventListener("change", async (e) => {
 
 const state = await send("get-state");
 fill(state?.settings || defaultSettings);
+const extLabel = document.getElementById("extIdLabel");
+if (extLabel) extLabel.textContent = state?.extensionId || chrome.runtime.id;
+const helper = await send("native-status");
+const hint = document.getElementById("helperHint");
+if (hint && helper?.connected) {
+  hint.insertAdjacentHTML(
+    "beforeend",
+    `<br><strong style="color:#2dd4bf">Helper đang chạy</strong>${
+      helper.ytdlpReady ? " · yt-dlp OK" : " · chưa có yt-dlp"
+    }`
+  );
+}

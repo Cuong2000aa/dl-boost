@@ -23,6 +23,14 @@
         <section>
           <h2>Tăng tốc & hàng đợi</h2>
           <label>
+            Chế độ tải
+            <select name="downloadMode">
+              <option value="auto">Tự động (khuyên dùng)</option>
+              <option value="accelerate">Ưu tiên đa kết nối</option>
+              <option value="native">Native Edge/Chrome (ổn định)</option>
+            </select>
+          </label>
+          <label>
             Số kết nối mỗi file (1–16)
             <input name="connections" type="number" min="1" max="16" />
           </label>
@@ -61,16 +69,38 @@
         </section>
 
         <section>
-          <h2>Grabber trang</h2>
+          <h2>Grabber & bắt video</h2>
           <label class="check">
             <input name="snifferEnabled" type="checkbox" />
-            Bật sniffer / grabber
+            Bật grabber trang
+          </label>
+          <label class="check">
+            <input name="networkSnifferEnabled" type="checkbox" />
+            Bắt media từ mạng (mp4 / m3u8 / HLS)
           </label>
           <label class="check">
             <input name="snifferAutoShow" type="checkbox" />
-            Tự hiện panel khi phát hiện tệp
+            Tự hiện panel khi bắt được media
           </label>
-          <p class="hint">Ctrl+Shift+Y trên trang để mở grabber. Alt+click link tệp để tải nhanh.</p>
+          <p class="hint">
+            Cmd/Ctrl+Shift+Y mở grabber. Phát video trên trang rồi mở popup → Quét media.
+          </p>
+        </section>
+
+        <section>
+          <h2>Native Helper (kiểu IDM)</h2>
+          <label class="check">
+            <input name="useNativeHelper" type="checkbox" />
+            Dùng Helper trên máy (Mac/Win + yt-dlp cho YT/FB/…)
+          </label>
+          <p class="hint" id="helperHint">
+            <strong>Mac:</strong> <code>./native-host/install-mac.sh &lt;ID&gt;</code> rồi <code>brew install yt-dlp</code><br />
+            <strong>Windows (PowerShell):</strong>
+            <code>.\native-host\install-win.ps1 -ExtensionId &lt;ID&gt;</code> (Win: .exe, không cần Python)
+            rồi <code>winget install yt-dlp.yt-dlp</code><br />
+            File: ~/Downloads/PulseDM (Mac) hoặc %USERPROFILE%\Downloads\PulseDM (Win)
+          </p>
+          <p class="hint">Extension ID: <code id="extIdLabel">…</code></p>
         </section>
 
         <section>

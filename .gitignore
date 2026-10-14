@@ -4,5 +4,8 @@ node_modules/
 .idea/
 .vscode/
 dist/
+.tools/
+native-host/bin/*-darwin*
 *.crx
 *.pem
+

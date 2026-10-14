@@ -32,7 +32,25 @@
     <div class="quick">
       <button type="button" id="batchBtn" class="chip">Batch URL</button>
       <button type="button" id="pasteBtn" class="chip">Dán & tải</button>
+      <button type="button" id="refreshMedia" class="chip">Quét media</button>
+      <button type="button" id="helperPageBtn" class="chip accent">Tải tab (Helper)</button>
     </div>
+
+    <div id="helperBar" class="helper-bar">
+      Helper: <span id="helperStatus">đang kiểm tra…</span>
+      <button type="button" id="copyInstall" class="linkish">Copy lệnh cài</button>
+    </div>
+
+    <section class="media-box">
+      <div class="media-head">
+        <strong>Media tab hiện tại</strong>
+        <button type="button" id="dlAllMedia" class="linkish">Tải tất cả</button>
+      </div>
+      <ul id="mediaList" class="media-list"></ul>
+      <p id="mediaEmpty" class="media-empty">
+        Phát video trên trang rồi bấm Quét media (hoặc Cmd/Ctrl+Shift+Y).
+      </p>
+    </section>
 
     <div id="stats" class="stats">
       <span id="statActive">0 đang tải</span>
@@ -40,7 +58,7 @@
     </div>
 
     <ul id="list" class="list" aria-live="polite"></ul>
-    <p id="empty" class="empty">Chưa có tải xuống. Dán URL, Alt+click, hoặc Ctrl+Shift+Y trên trang.</p>
+    <p id="empty" class="empty">Chưa có tải xuống.</p>
 
     <footer class="foot">
       <label class="toggle">
