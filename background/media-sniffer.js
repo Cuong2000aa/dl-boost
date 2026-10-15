@@ -63,6 +63,14 @@ async function handleHeaders(details, getSettings, emit) {
   const url = details.url;
   if (!isSniffableMedia(url, ct, len)) return;
 
+  let referrer = details.initiator || "";
+  try {
+    const tab = await chrome.tabs.get(details.tabId);
+    if (tab?.url?.startsWith("http")) referrer = tab.url;
+  } catch {
+    /* ignore */
+  }
+
   upsert(details.tabId, {
     url,
     kind: guessMediaKind(url, ct),
@@ -73,6 +81,8 @@ async function handleHeaders(details, getSettings, emit) {
     statusCode: details.statusCode,
     timeStamp: details.timeStamp || Date.now(),
     source: "network",
+    referrer,
+    tabId: details.tabId,
   });
   emit(details.tabId);
 }
@@ -84,6 +94,13 @@ async function handleCompleted(details, getSettings, emit) {
   const ct = headers["content-type"] || "";
   const len = Number(headers["content-length"]) || details.totalBytes || 0;
   if (!isSniffableMedia(details.url, ct, len)) return;
+  let referrer = details.initiator || "";
+  try {
+    const tab = await chrome.tabs.get(details.tabId);
+    if (tab?.url?.startsWith("http")) referrer = tab.url;
+  } catch {
+    /* ignore */
+  }
   upsert(details.tabId, {
     url: details.url,
     kind: guessMediaKind(details.url, ct),
@@ -93,6 +110,8 @@ async function handleCompleted(details, getSettings, emit) {
     statusCode: details.statusCode,
     timeStamp: details.timeStamp || Date.now(),
     source: "network",
+    referrer,
+    tabId: details.tabId,
   });
   emit(details.tabId);
 }

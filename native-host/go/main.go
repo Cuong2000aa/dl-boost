@@ -23,8 +23,46 @@ import (
 
 const (
 	hostName = "com.pulsedm.host"
-	version  = "1.2.0"
+	version  = "1.3.1"
 )
+
+var (
+	activeCmds sync.Map // jobId -> *exec.Cmd
+	cliMode    bool     // CLI download: progress → stderr, không frame native messaging
+)
+
+func emitProgress(msg map[string]any) {
+	if cliMode {
+		if m := strField(msg, "message"); m != "" {
+			fmt.Fprintln(os.Stderr, m)
+			return
+		}
+		if pct, ok := msg["percent"].(float64); ok {
+			fmt.Fprintf(os.Stderr, "\r%.1f%%   ", pct)
+			return
+		}
+		loaded, _ := msg["loaded"].(int64)
+		total, _ := msg["total"].(int64)
+		// JSON numbers often decode as float64
+		if loaded == 0 {
+			if f, ok := msg["loaded"].(float64); ok {
+				loaded = int64(f)
+			}
+		}
+		if total == 0 {
+			if f, ok := msg["total"].(float64); ok {
+				total = int64(f)
+			}
+		}
+		if total > 0 {
+			fmt.Fprintf(os.Stderr, "\r%.1f%% (%d / %d)   ", 100*float64(loaded)/float64(total), loaded, total)
+		} else if loaded > 0 {
+			fmt.Fprintf(os.Stderr, "\r%d bytes   ", loaded)
+		}
+		return
+	}
+	_ = sendMessage(msg)
+}
 
 var siteRE = regexp.MustCompile(`(?i)(^|\.)(youtube\.com|youtu\.be|facebook\.com|fb\.watch|fb\.com|instagram\.com|tiktok\.com|x\.com|twitter\.com|vimeo\.com)($|\.)`)
 
@@ -139,6 +177,7 @@ func statusPayload() map[string]any {
 			}
 		}
 	}
+	ff := whichFfmpeg()
 	return map[string]any{
 		"type":         "status",
 		"ok":           true,
@@ -149,6 +188,8 @@ func statusPayload() map[string]any {
 		"ytdlpPath":    nullIfEmpty(ytdlp),
 		"ytdlpVersion": ytdlpVer,
 		"ytdlpReady":   ready,
+		"ffmpegPath":   nullIfEmpty(ff),
+		"ffmpegReady":  ff != "",
 		"downloadDir":  defaultDownloadDir(),
 		"platform":     runtime.GOOS,
 	}
@@ -194,6 +235,9 @@ func intField(msg map[string]any, key string, def int) int {
 }
 
 func looksLikeSitePage(raw string) bool {
+	if strings.Contains(strings.ToLower(raw), ".m3u8") {
+		return true
+	}
 	u, err := url.Parse(raw)
 	if err != nil {
 		return false
@@ -213,12 +257,21 @@ func safeName(name string) string {
 	return name
 }
 
-func httpDownload(rawURL, dest string, connections int, jobID string) (map[string]any, error) {
+func applyHeaders(req *http.Request, headers map[string]string) {
+	for k, v := range headers {
+		if v != "" {
+			req.Header.Set(k, v)
+		}
+	}
+}
+
+func httpDownload(rawURL, dest string, connections int, jobID string, headers map[string]string) (map[string]any, error) {
 	client := &http.Client{Timeout: 120 * time.Second}
 	req, err := http.NewRequest(http.MethodHead, rawURL, nil)
 	if err != nil {
 		return nil, err
 	}
+	applyHeaders(req, headers)
 	size := int64(0)
 	accept := ""
 	if res, err := client.Do(req); err == nil {
@@ -227,7 +280,7 @@ func httpDownload(rawURL, dest string, connections int, jobID string) (map[strin
 		accept = strings.ToLower(res.Header.Get("Accept-Ranges"))
 	}
 	if size <= 0 || !strings.Contains(accept, "bytes") || connections <= 1 {
-		return httpSingle(rawURL, dest, jobID)
+		return httpSingle(rawURL, dest, jobID, headers)
 	}
 
 	part := (size + int64(connections) - 1) / int64(connections)
@@ -269,6 +322,7 @@ func httpDownload(rawURL, dest string, connections int, jobID string) (map[strin
 				stop.Store(true)
 				return
 			}
+			applyHeaders(req, headers)
 			req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
 			res, err := client.Do(req)
 			if err != nil {
@@ -307,7 +361,7 @@ func httpDownload(rawURL, dest string, connections int, jobID string) (map[strin
 					for _, v := range loaded {
 						sum += atomic.LoadInt64(&v)
 					}
-					_ = sendMessage(map[string]any{
+					emitProgress(map[string]any{
 						"type":   "progress",
 						"jobId":  jobID,
 						"loaded": sum,
@@ -361,9 +415,14 @@ func httpDownload(rawURL, dest string, connections int, jobID string) (map[strin
 	return map[string]any{"path": dest, "size": st.Size(), "mode": "native-helper"}, nil
 }
 
-func httpSingle(rawURL, dest, jobID string) (map[string]any, error) {
+func httpSingle(rawURL, dest, jobID string, headers map[string]string) (map[string]any, error) {
 	client := &http.Client{Timeout: 120 * time.Second}
-	res, err := client.Get(rawURL)
+	req, err := http.NewRequest(http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	applyHeaders(req, headers)
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +446,7 @@ func httpSingle(rawURL, dest, jobID string) (map[string]any, error) {
 			if t <= 0 {
 				t = loaded
 			}
-			_ = sendMessage(map[string]any{
+			emitProgress(map[string]any{
 				"type":   "progress",
 				"jobId":  jobID,
 				"loaded": loaded,
@@ -409,7 +468,92 @@ func httpSingle(rawURL, dest, jobID string) (map[string]any, error) {
 	return map[string]any{"path": dest, "size": st.Size(), "mode": "native-helper"}, nil
 }
 
-func runYtdlp(rawURL, outDir, jobID string, extra []string) (map[string]any, error) {
+func whichFfmpeg() string {
+	if p, err := exec.LookPath("ffmpeg"); err == nil {
+		return p
+	}
+	for _, p := range []string{"/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"} {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
+
+func openPath(path string, reveal bool) error {
+	if path == "" {
+		return fmt.Errorf("path trống")
+	}
+	if _, err := os.Stat(path); err != nil {
+		return err
+	}
+	switch runtime.GOOS {
+	case "windows":
+		if reveal {
+			return exec.Command("explorer", "/select,", path).Start()
+		}
+		return exec.Command("cmd", "/C", "start", "", path).Start()
+	case "darwin":
+		if reveal {
+			return exec.Command("open", "-R", path).Start()
+		}
+		return exec.Command("open", path).Start()
+	default:
+		if reveal {
+			return exec.Command("xdg-open", filepath.Dir(path)).Start()
+		}
+		return exec.Command("xdg-open", path).Start()
+	}
+}
+
+func remuxToMp4(tsPath string) (string, error) {
+	ff := whichFfmpeg()
+	if ff == "" {
+		return "", fmt.Errorf("Chưa cài ffmpeg (brew/winget install ffmpeg) — giữ file .ts")
+	}
+	out := strings.TrimSuffix(tsPath, filepath.Ext(tsPath)) + ".mp4"
+	cmd := exec.Command(ff, "-y", "-i", tsPath, "-c", "copy", "-bsf:a", "aac_adtstoasc", out)
+	if outB, err := cmd.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("ffmpeg remux thất bại: %v (%s)", err, string(outB))
+	}
+	_ = os.Remove(tsPath)
+	return out, nil
+}
+
+func headerMap(msg map[string]any) map[string]string {
+	out := map[string]string{}
+	raw, ok := msg["headers"]
+	if !ok || raw == nil {
+		ref := strField(msg, "referrer")
+		if ref == "" {
+			ref = strField(msg, "referer")
+		}
+		if ref != "" {
+			out["Referer"] = ref
+		}
+		return out
+	}
+	switch t := raw.(type) {
+	case map[string]any:
+		for k, v := range t {
+			if s, ok := v.(string); ok && s != "" {
+				out[k] = s
+			}
+		}
+	}
+	if _, ok := out["Referer"]; !ok {
+		ref := strField(msg, "referrer")
+		if ref == "" {
+			ref = strField(msg, "referer")
+		}
+		if ref != "" {
+			out["Referer"] = ref
+		}
+	}
+	return out
+}
+
+func runYtdlp(rawURL, outDir, jobID string, extra []string, headers map[string]string) (map[string]any, error) {
 	ytdlp := whichYtdlp()
 	if ytdlp == "" {
 		return nil, fmt.Errorf("Chưa cài yt-dlp. Windows: winget install yt-dlp.yt-dlp  |  Mac: brew install yt-dlp")
@@ -421,13 +565,19 @@ func runYtdlp(rawURL, outDir, jobID string, extra []string) (map[string]any, err
 		return nil, err
 	}
 	template := filepath.Join(outDir, "%(title).180B [%(id)s].%(ext)s")
-	cmdArgs := []string{"--no-playlist", "--newline", "-o", template, "--no-mtime"}
+	cmdArgs := []string{"--no-playlist", "--newline", "-o", template, "--no-mtime", "-f", "bv*+ba/b", "--merge-output-format", "mp4"}
+	if ref := headers["Referer"]; ref != "" {
+		cmdArgs = append(cmdArgs, "--referer", ref)
+	}
+	if ck := headers["Cookie"]; ck != "" {
+		cmdArgs = append(cmdArgs, "--add-header", "Cookie:"+ck)
+	}
 	if len(extra) > 0 {
 		cmdArgs = append(extra, cmdArgs...)
 	}
 	cmdArgs = append(cmdArgs, rawURL)
 
-	_ = sendMessage(map[string]any{
+	emitProgress(map[string]any{
 		"type":    "progress",
 		"jobId":   jobID,
 		"loaded":  0,
@@ -445,6 +595,8 @@ func runYtdlp(rawURL, outDir, jobID string, extra []string) (map[string]any, err
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
+	activeCmds.Store(jobID, cmd)
+	defer activeCmds.Delete(jobID)
 
 	var lastPath string
 	pctRE := regexp.MustCompile(`\[download\]\s+([\d.]+)%`)
@@ -462,7 +614,7 @@ func runYtdlp(rawURL, outDir, jobID string, extra []string) (map[string]any, err
 			if len(msg) > 200 {
 				msg = msg[:200]
 			}
-			_ = sendMessage(map[string]any{
+			emitProgress(map[string]any{
 				"type":    "progress",
 				"jobId":   jobID,
 				"percent": pct,
@@ -542,10 +694,45 @@ func handle(msg map[string]any) error {
 	if jobID == "" {
 		jobID = fmt.Sprintf("job_%d", time.Now().Unix())
 	}
+	hdrs := headerMap(msg)
 
 	switch mtype {
 	case "ping", "status":
 		return sendMessage(statusPayload())
+	case "cancel":
+		if v, ok := activeCmds.Load(jobID); ok {
+			if cmd, ok := v.(*exec.Cmd); ok && cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			activeCmds.Delete(jobID)
+		}
+		return sendMessage(map[string]any{"type": "cancelled", "jobId": jobID, "ok": true})
+	case "open-path", "reveal-path":
+		path := strField(msg, "path")
+		reveal := mtype == "reveal-path" || msg["reveal"] == true
+		if err := openPath(path, reveal); err != nil {
+			return err
+		}
+		return sendMessage(map[string]any{"type": "done", "ok": true, "path": path})
+	case "remux":
+		path := strField(msg, "path")
+		out, err := remuxToMp4(path)
+		if err != nil {
+			return err
+		}
+		st, _ := os.Stat(out)
+		size := int64(0)
+		if st != nil {
+			size = st.Size()
+		}
+		return sendMessage(map[string]any{
+			"type":     "done",
+			"ok":       true,
+			"path":     out,
+			"size":     size,
+			"filename": filepath.Base(out),
+			"mode":     "remux",
+		})
 	case "download":
 		rawURL := strField(msg, "url")
 		if !strings.HasPrefix(rawURL, "http") {
@@ -576,10 +763,11 @@ func handle(msg map[string]any) error {
 		}
 		var result map[string]any
 		var err error
-		if prefer == "ytdlp" || (prefer == "auto" && looksLikeSitePage(rawURL)) {
-			result, err = runYtdlp(rawURL, outDir, jobID, stringSliceField(msg, "ytdlpArgs"))
+		useYtdlp := prefer == "ytdlp" || prefer == "hls" || (prefer == "auto" && looksLikeSitePage(rawURL))
+		if useYtdlp {
+			result, err = runYtdlp(rawURL, outDir, jobID, stringSliceField(msg, "ytdlpArgs"), hdrs)
 		} else {
-			result, err = httpDownload(rawURL, dest, connections, jobID)
+			result, err = httpDownload(rawURL, dest, connections, jobID, hdrs)
 			if err == nil {
 				result["filename"] = filename
 			}
@@ -593,7 +781,7 @@ func handle(msg map[string]any) error {
 		}
 		return sendMessage(out)
 	case "ytdlp":
-		result, err := runYtdlp(strField(msg, "url"), strField(msg, "outDir"), jobID, stringSliceField(msg, "ytdlpArgs"))
+		result, err := runYtdlp(strField(msg, "url"), strField(msg, "outDir"), jobID, stringSliceField(msg, "ytdlpArgs"), hdrs)
 		if err != nil {
 			return err
 		}
@@ -607,11 +795,133 @@ func handle(msg map[string]any) error {
 	}
 }
 
-func main() {
-	if len(os.Args) > 1 && (os.Args[1] == "--status" || os.Args[1] == "status") {
-		b, _ := json.MarshalIndent(statusPayload(), "", "  ")
+func printCLIHelp() {
+	fmt.Fprintln(os.Stderr, `PulseDM native host CLI
+
+  pulsedm_host status
+  pulsedm_host download [-o DIR] [-e auto|ytdlp|http] [-f NAME] <url>
+
+Examples:
+  pulsedm_host download https://example.com/file.zip
+  pulsedm_host download -e ytdlp -o ~/Downloads/PulseDM "https://youtu.be/…"
+`)
+}
+
+func runCLIDownload(args []string) int {
+	cliMode = true
+	outDir := ""
+	engine := "auto"
+	filename := ""
+	rawURL := ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch a {
+		case "-h", "--help":
+			printCLIHelp()
+			return 0
+		case "-o", "--out", "--outdir":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "missing value for -o")
+				return 2
+			}
+			outDir = args[i]
+		case "-e", "--engine":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "missing value for -e")
+				return 2
+			}
+			engine = args[i]
+		case "-f", "--filename":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "missing value for -f")
+				return 2
+			}
+			filename = args[i]
+		default:
+			if strings.HasPrefix(a, "-") {
+				fmt.Fprintf(os.Stderr, "unknown flag: %s\n", a)
+				return 2
+			}
+			if rawURL == "" {
+				rawURL = a
+			}
+		}
+	}
+	if rawURL == "" || !strings.HasPrefix(rawURL, "http") {
+		fmt.Fprintln(os.Stderr, "usage: pulsedm_host download [-o dir] [-e auto|ytdlp|http] <url>")
+		return 2
+	}
+	if outDir == "" {
+		outDir = defaultDownloadDir()
+	}
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		return 1
+	}
+	jobID := fmt.Sprintf("cli_%d", time.Now().Unix())
+	prefer := engine
+	if prefer == "" {
+		prefer = "auto"
+	}
+	var result map[string]any
+	var err error
+	useYtdlp := prefer == "ytdlp" || prefer == "hls" || (prefer == "auto" && looksLikeSitePage(rawURL))
+	if useYtdlp {
+		fmt.Fprintln(os.Stderr, "engine: ytdlp")
+		result, err = runYtdlp(rawURL, outDir, jobID, nil, map[string]string{})
+	} else {
+		if filename == "" {
+			filename = safeName(fmt.Sprintf("file-%d", time.Now().Unix()))
+			if u, perr := url.Parse(rawURL); perr == nil {
+				base := filepath.Base(u.Path)
+				if base != "" && base != "/" && base != "." {
+					filename = safeName(base)
+				}
+			}
+		} else {
+			filename = safeName(filename)
+		}
+		dest := filepath.Join(outDir, filename)
+		fmt.Fprintf(os.Stderr, "engine: http → %s\n", dest)
+		result, err = httpDownload(rawURL, dest, 8, jobID, map[string]string{})
+		if err == nil {
+			result["filename"] = filename
+		}
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, err.Error())
+		out := map[string]any{"ok": false, "error": err.Error()}
+		b, _ := json.MarshalIndent(out, "", "  ")
 		fmt.Println(string(b))
-		return
+		return 1
+	}
+	fmt.Fprintln(os.Stderr)
+	out := map[string]any{"ok": true, "jobId": jobID}
+	for k, v := range result {
+		out[k] = v
+	}
+	b, _ := json.MarshalIndent(out, "", "  ")
+	fmt.Println(string(b))
+	return 0
+}
+
+func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--status", "status":
+			b, _ := json.MarshalIndent(statusPayload(), "", "  ")
+			fmt.Println(string(b))
+			return
+		case "download", "fetch":
+			os.Exit(runCLIDownload(os.Args[2:]))
+		case "-h", "--help", "help":
+			printCLIHelp()
+			return
+		}
 	}
 	for {
 		msg, err := readMessage()

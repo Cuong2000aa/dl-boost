@@ -1,45 +1,20 @@
 # PulseDM Native Helper (macOS + Windows)
 
-Giống hướng IDM: **extension + app nhỏ trên máy** (Chrome/Edge Native Messaging).
-
-Optional: [yt-dlp](https://github.com/yt-dlp/yt-dlp) để tải YouTube / Facebook / …
+Go binary — **không cần Python**. Optional: [yt-dlp](https://github.com/yt-dlp/yt-dlp) + [ffmpeg](https://ffmpeg.org/).
 
 ---
 
-## Windows (không cần Python)
-
-Helper đã đóng gói sẵn: `native-host/bin/pulsedm_host.exe` (x64) và `pulsedm_host-arm64.exe`.
-
-1. Load unpacked PulseDM trong Edge → bật Developer mode → copy **ID**
-2. Mở **PowerShell**:
+## Windows
 
 ```powershell
 cd C:\path\to\dl-boost
 Set-ExecutionPolicy -Scope Process Bypass
 .\native-host\install-win.ps1 -ExtensionId YOUR_EXTENSION_ID
 winget install yt-dlp.yt-dlp
+winget install Gyan.FFmpeg
 ```
 
-3. Reload PulseDM → popup: `Helper: OK · yt-dlp …`
-
-File tải: `%USERPROFILE%\Downloads\PulseDM`
-
-### Build lại .exe (dev)
-
-Trên Mac/Linux có Go:
-
-```bash
-chmod +x native-host/build-win.sh
-./native-host/build-win.sh
-```
-
-### Gỡ (Windows)
-
-```powershell
-Remove-Item -Recurse -Force "$env:LOCALAPPDATA\PulseDM" -ErrorAction SilentlyContinue
-Remove-Item -Path "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.pulsedm.host" -Recurse -ErrorAction SilentlyContinue
-Remove-Item -Path "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.pulsedm.host" -Recurse -ErrorAction SilentlyContinue
-```
+File: `%USERPROFILE%\Downloads\PulseDM`
 
 ---
 
@@ -49,38 +24,37 @@ Remove-Item -Path "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.pulsedm
 cd /path/to/dl-boost
 chmod +x native-host/install-mac.sh
 ./native-host/install-mac.sh YOUR_EXTENSION_ID
-brew install yt-dlp
+brew install yt-dlp ffmpeg
 ```
 
-Cần **Python 3** trên Mac (script `pulsedm_host.py`).
+Dùng `native-host/bin/pulsedm_host-darwin-arm64` (Apple Silicon) hoặc `…-amd64`.
 
-File tải: `~/Downloads/PulseDM`
-
-### Gỡ (macOS)
-
-- `~/.pulsedm/`
-- `~/Library/Application Support/Microsoft Edge/NativeMessagingHosts/com.pulsedm.host.json`
-- Chrome tương ứng nếu có
+File: `~/Downloads/PulseDM`
 
 ---
 
-## Dùng
-
-- Mở tab YT/FB → popup → **Tải tab (Helper)**  
-- Hoặc dán URL trang vào ô URL  
-
-## Giới hạn
-
-- Cần cập nhật yt-dlp khi site đổi: `yt-dlp -U`  
-- DRM / video private có thể fail  
-- Tuân thủ ToS từng nền tảng  
-
-## Kiểm tra host
+## Build lại
 
 ```bash
-# Mac (Python)
-python3 native-host/pulsedm_host.py --status
+./native-host/build-win.sh   # Win + Mac binaries → native-host/bin/
+```
 
-# Windows (exe đã cài)
-& "$env:LOCALAPPDATA\PulseDM\native-host\pulsedm_host.exe" --status
+---
+
+## Khả năng host
+
+- Multi-connection HTTP ghi đĩa + Referer/Cookie  
+- yt-dlp (YT/FB/HLS → mp4)  
+- `open-path` / `reveal-path`  
+- `remux` (.ts → .mp4 qua ffmpeg)  
+- `cancel` job  
+
+```bash
+./native-host/bin/pulsedm_host-darwin-arm64 --status
+# Win:
+%LOCALAPPDATA%\PulseDM\native-host\pulsedm_host.exe --status
+
+# CLI download (progress → stderr, JSON → stdout)
+./scripts/pulsedm download -o ~/Downloads/PulseDM "https://example.com/file.zip"
+./scripts/pulsedm download -e ytdlp "https://youtu.be/…"
 ```

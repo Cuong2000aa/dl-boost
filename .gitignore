@@ -5,7 +5,8 @@ node_modules/
 .vscode/
 dist/
 .tools/
-native-host/bin/*-darwin*
+# Go toolchain must stay OUTSIDE extension root (Edge counts whole folder)
 *.crx
 *.pem
+
 

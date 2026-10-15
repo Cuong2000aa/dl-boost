@@ -1,10 +1,13 @@
 import { formatBytes, formatSpeed, formatEta, formatTime, escapeHtml } from "../lib/format.js";
+import { bytesPerSecToMbps, formatMbps } from "../lib/net-meter.js";
 import { CATEGORY_LABELS } from "../lib/settings.js";
 
 const tbody = document.getElementById("tbody");
 const historyBody = document.getElementById("historyBody");
+const ledgerBody = document.getElementById("ledgerBody");
 const empty = document.getElementById("empty");
 const historyEmpty = document.getElementById("historyEmpty");
+const ledgerEmpty = document.getElementById("ledgerEmpty");
 const addForm = document.getElementById("addForm");
 const urlInput = document.getElementById("urlInput");
 const scheduleInput = document.getElementById("scheduleInput");
@@ -13,6 +16,10 @@ const catsEl = document.getElementById("cats");
 const searchEl = document.getElementById("search");
 const tabs = document.getElementById("tabs");
 const bigSpeed = document.getElementById("bigSpeed");
+const bigMbps = document.getElementById("bigMbps");
+const probeMbps = document.getElementById("probeMbps");
+const probeNetBtn = document.getElementById("probeNetBtn");
+const probeHint = document.getElementById("probeHint");
 const bigActive = document.getElementById("bigActive");
 const bigQueued = document.getElementById("bigQueued");
 const bigDone = document.getElementById("bigDone");
@@ -24,6 +31,7 @@ let filter = "all";
 let tab = "downloads";
 let jobs = [];
 let history = [];
+let ledger = [];
 let query = "";
 
 const statusLabel = {
@@ -117,9 +125,9 @@ function renderDownloads() {
   const active = jobs.filter((j) => j.status === "downloading");
   const queued = jobs.filter((j) => j.status === "queued");
   const done = jobs.filter((j) => j.status === "completed");
-  bigSpeed.textContent = formatSpeed(
-    active.reduce((s, j) => s + (j.speed || 0), 0)
-  );
+  const speedSum = active.reduce((s, j) => s + (j.speed || 0), 0);
+  bigSpeed.textContent = formatSpeed(speedSum);
+  if (bigMbps) bigMbps.textContent = formatMbps(bytesPerSecToMbps(speedSum));
   bigActive.textContent = String(active.length);
   bigQueued.textContent = String(queued.length);
   bigDone.textContent = String(done.length);
@@ -215,10 +223,61 @@ function renderHistory() {
     .join("");
 }
 
+function renderLedger() {
+  let list = ledger;
+  if (query) {
+    const q = query.toLowerCase();
+    list = list.filter((e) => {
+      const hay = [
+        e.filename,
+        e.url,
+        e.referrer,
+        e.pageTitle,
+        e.mode,
+        e.source,
+        e.fingerprint,
+        e.localPath,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }
+  if (ledgerEmpty) ledgerEmpty.classList.toggle("hidden", list.length > 0);
+  if (!ledgerBody) return;
+  ledgerBody.innerHTML = list
+    .map((e) => {
+      const src = [e.mode || e.source, e.fingerprint ? `#${e.fingerprint}` : ""]
+        .filter(Boolean)
+        .join(" · ");
+      return `
+    <tr data-id="${e.id}">
+      <td>
+        <div class="fname" title="${escapeHtml(e.pageTitle || e.filename)}">${escapeHtml(e.filename)}</div>
+        <span class="suburl">${escapeHtml(e.url)}</span>
+      </td>
+      <td><span class="suburl">${escapeHtml(src)}</span></td>
+      <td>${formatBytes(e.size)}</td>
+      <td>${formatTime(e.completedAt)}</td>
+      <td>
+        <div class="row-actions">
+          <button data-act="redownload">Tải lại</button>
+          <button data-act="open">Mở</button>
+          <button data-act="folder">Thư mục</button>
+          <button data-act="remove-ledger">Xóa</button>
+        </div>
+      </td>
+    </tr>`;
+    })
+    .join("");
+}
+
 function render() {
   renderCats();
   renderDownloads();
   renderHistory();
+  renderLedger();
 }
 
 function showTab(name) {
@@ -229,6 +288,8 @@ function showTab(name) {
   document.getElementById("panel-downloads").classList.toggle("hidden", name !== "downloads");
   document.getElementById("panel-batch").classList.toggle("hidden", name !== "batch");
   document.getElementById("panel-history").classList.toggle("hidden", name !== "history");
+  const ledgerPanel = document.getElementById("panel-ledger");
+  if (ledgerPanel) ledgerPanel.classList.toggle("hidden", name !== "ledger");
   if (name === "batch") document.getElementById("batchUrls").focus();
 }
 
@@ -236,6 +297,7 @@ async function refresh() {
   const state = await send("get-state");
   jobs = state?.jobs || [];
   history = state?.history || [];
+  ledger = state?.ledger || [];
   render();
 }
 
@@ -324,6 +386,12 @@ document.getElementById("pasteClipboard").addEventListener("click", async () => 
   }
 });
 
+document.getElementById("clearLedger")?.addEventListener("click", async () => {
+  if (!confirm("Xóa toàn bộ Kho media?")) return;
+  await send("clear-ledger");
+  refresh();
+});
+
 document.getElementById("clearHistory").addEventListener("click", async () => {
   await send("clear-history");
   refresh();
@@ -361,6 +429,29 @@ tbody.addEventListener("click", async (e) => {
   refresh();
 });
 
+ledgerBody?.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  const id = btn.closest("tr")?.dataset.id;
+  if (!id) return;
+  const act = btn.dataset.act;
+  const entry = ledger.find((x) => x.id === id);
+  if (act === "redownload" && entry?.url) {
+    await send("add-download", {
+      payload: {
+        url: entry.url,
+        filename: entry.filename,
+        referrer: entry.referrer || "",
+      },
+    });
+    showTab("downloads");
+  }
+  if (act === "open") await send("open-file", { id });
+  if (act === "folder") await send("show-folder", { id });
+  if (act === "remove-ledger") await send("remove-ledger", { id });
+  refresh();
+});
+
 historyBody.addEventListener("click", async (e) => {
   const btn = e.target.closest("button[data-act]");
   if (!btn) return;
@@ -383,6 +474,10 @@ document.getElementById("scheduleSave").addEventListener("click", async (e) => {
 });
 
 chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === "ledger-updated") {
+    ledger = msg.ledger || [];
+    renderLedger();
+  }
   if (msg?.type === "jobs-updated") {
     jobs = msg.jobs || [];
     renderDownloads();
@@ -398,6 +493,7 @@ function applyHash() {
   const hash = (location.hash || "").replace("#", "");
   if (hash === "batch") showTab("batch");
   else if (hash === "history") showTab("history");
+  else if (hash === "ledger") showTab("ledger");
   else if (hash === "scheduled") {
     filter = "scheduled";
     showTab("downloads");
@@ -409,6 +505,26 @@ function applyHash() {
   }
   render();
 }
+
+probeNetBtn?.addEventListener("click", async () => {
+  probeNetBtn.disabled = true;
+  probeNetBtn.textContent = "Đang đo…";
+  if (probeHint) probeHint.textContent = "Đang tải mẫu ~1.5MB để ước lượng bandwidth…";
+  try {
+    const res = await send("probe-bandwidth", { bytes: 1_500_000 });
+    if (res?.error) throw new Error(res.error);
+    if (probeMbps) probeMbps.textContent = formatMbps(res.mbps);
+    if (probeHint) {
+      probeHint.textContent = `Đo xong: ↓ ${formatMbps(res.mbps)} (peak ${formatMbps(res.peakMbps)}) · ${Number(res.elapsed || 0).toFixed(1)}s`;
+    }
+  } catch (e) {
+    if (probeHint) probeHint.textContent = e?.message || "Đo mạng thất bại";
+    if (probeMbps) probeMbps.textContent = "err";
+  } finally {
+    probeNetBtn.disabled = false;
+    probeNetBtn.textContent = "Đo ngay";
+  }
+});
 
 window.addEventListener("hashchange", applyHash);
 renderCats();

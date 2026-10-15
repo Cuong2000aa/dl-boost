@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "PulseDM",
   "description": "PulseDM — download manager + native helper (yt-dlp) kiểu IDM cho Edge/Chrome.",
-  "version": "2.3.2",
+  "version": "2.5.1",
   "action": {
     "default_popup": "popup/popup.html",
     "default_title": "PulseDM",
@@ -37,7 +37,9 @@
     "offscreen",
     "clipboardRead",
     "webRequest",
-    "nativeMessaging"
+    "nativeMessaging",
+    "cookies",
+    "declarativeNetRequest"
   ],
   "host_permissions": ["<all_urls>"],
   "commands": {
@@ -54,6 +56,13 @@
         "mac": "Alt+Shift+A"
       },
       "description": "Mở batch add trong Manager"
+    },
+    "intent-capture": {
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      },
+      "description": "Intent Capture — tải media đang phát trên tab"
     }
   },
   "content_scripts": [

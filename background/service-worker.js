@@ -15,18 +15,59 @@ import {
   matchesCapture,
 } from "../lib/settings.js";
 import {
+  loadLedger,
+  saveLedger,
+  upsertLedgerEntry,
+  ledgerEntryFromJob,
+  searchLedger,
+} from "../lib/ledger.js";
+
+/** One-shot: seed ledger from history if kho empty */
+async function maybeMigrateHistoryToLedger() {
+  try {
+    const ledger = await loadLedger();
+    if (ledger.length) return;
+    const history = await getHistory();
+    if (!history.length) return;
+    for (const h of history.slice().reverse()) {
+      await upsertLedgerEntry(
+        ledgerEntryFromJob(
+          { ...h, total: h.size, completedAt: h.completedAt },
+          { source: "history-migrate" }
+        )
+      );
+    }
+  } catch {
+    /* ignore */
+  }
+}
+maybeMigrateHistoryToLedger();
+import {
   initMediaSniffer,
   listTabMedia,
   clearTabMedia,
   reportDomMedia,
 } from "./media-sniffer.js";
-import { isProbablyHls, downloadHlsToBuffer } from "../lib/hls.js";
+import { isProbablyHls, downloadHlsToBuffer, listHlsVariants } from "../lib/hls.js";
 import { guessMediaKind } from "../lib/media-detect.js";
 import {
   probeNativeHost,
   startNativeJob as startNativePortJob,
   isHelperSiteUrl,
+  openNativePath,
+  remuxNativePath,
 } from "./native-bridge.js";
+import {
+  buildDownloadHeaders,
+  installRefererRule,
+  removeRefererRule,
+} from "../lib/auth-headers.js";
+import { resolveRoute } from "../lib/domain-rules.js";
+import {
+  resolveIntent,
+  buildQualityOptions,
+} from "../lib/intent-capture.js";
+import { probeDownloadBandwidth } from "../lib/net-meter.js";
 
 /** @type {Map<string, AbortController>} */
 const controllers = new Map();
@@ -43,8 +84,16 @@ const nativeHelperCancels = new Map();
 /** cached helper probe */
 let helperStatusCache = { checkedAt: 0, data: null };
 
-const ACCEL_MIN = 1 * 1024 * 1024; // 1 MB
-const ACCEL_MAX = 1536 * 1024 * 1024; // 1.5 GB (keep RAM safe)
+async function jobAuthHeaders(job, settings) {
+  if (settings?.useTabAuth === false) {
+    return job.referrer ? { Referer: job.referrer } : {};
+  }
+  return buildDownloadHeaders({
+    url: job.url,
+    referrer: job.referrer || "",
+    useCookies: true,
+  });
+}
 
 initMediaSniffer({
   getSettings: () => getSettings(),
@@ -87,12 +136,36 @@ function uid(prefix = "job") {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function formatBadgeSpeed(bps) {
+  const n = Number(bps) || 0;
+  if (n < 1024) return "";
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)}K`;
+  const mb = n / (1024 * 1024);
+  return mb >= 10 ? `${Math.round(mb)}M` : `${mb.toFixed(1)}M`;
+}
+
 function updateBadge(jobs) {
-  const n = jobs.filter((j) =>
-    ["downloading", "queued"].includes(j.status)
-  ).length;
+  const list = jobs || [];
+  const active = list.filter((j) => j.status === "downloading");
+  const queued = list.filter((j) => j.status === "queued").length;
+  const speed = active.reduce((s, j) => s + (Number(j.speed) || 0), 0);
   chrome.action.setBadgeBackgroundColor({ color: "#0f766e" });
-  chrome.action.setBadgeText({ text: n > 0 ? String(n) : "" });
+  const speedText = formatBadgeSpeed(speed);
+  if (speedText) {
+    chrome.action.setBadgeText({ text: speedText.slice(0, 4) });
+    chrome.action.setTitle({
+      title: `PulseDM · ${speedText}/s · ${active.length} tải`,
+    });
+  } else if (active.length || queued) {
+    const n = active.length + queued;
+    chrome.action.setBadgeText({ text: String(n) });
+    chrome.action.setTitle({
+      title: `PulseDM · ${active.length} đang tải · ${queued} chờ`,
+    });
+  } else {
+    chrome.action.setBadgeText({ text: "" });
+    chrome.action.setTitle({ title: "PulseDM" });
+  }
 }
 
 async function upsertJob(job) {
@@ -219,6 +292,24 @@ chrome.contextMenus.onClicked.addListener(async (info) => {
 chrome.commands.onCommand.addListener(async (command) => {
   if (command === "open-manager") openManager();
   if (command === "add-from-clipboard") openManager("batch");
+  if (command === "intent-capture") {
+    const res = await intentCapture({ qualityId: "auto" });
+    if (res?.ok && (await getSettings()).showNotifications) {
+      chrome.notifications.create(`intent_${Date.now()}`, {
+        type: "basic",
+        iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+        title: "PulseDM · Intent Capture",
+        message: res.message || "Đã xếp hàng",
+      });
+    } else if (!res?.ok) {
+      chrome.notifications.create(`intent_err_${Date.now()}`, {
+        type: "basic",
+        iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+        title: "PulseDM · Intent Capture",
+        message: res?.error || "Không bắt được media",
+      });
+    }
+  }
 });
 
 function openManager(hash = "") {
@@ -276,12 +367,24 @@ chrome.downloads.onChanged.addListener(async (delta) => {
     try {
       const [item] = await chrome.downloads.search({ id: delta.id });
       if (item) {
+        const jobs = await getJobs();
+        const prev = jobs.find((j) => j.id === jobId);
+        const loaded = item.bytesReceived || 0;
+        const total = item.totalBytes > 0 ? item.totalBytes : 0;
+        const now = Date.now();
+        const dt = (now - (prev?._speedAt || now)) / 1000;
+        let speed = prev?.speed || 0;
+        if (dt >= 0.4 && prev?.loaded != null) {
+          speed = Math.max(0, (loaded - prev.loaded) / dt);
+        }
         scheduleProgressWrite(jobId, {
-          loaded: item.bytesReceived || 0,
-          total: item.totalBytes > 0 ? item.totalBytes : 0,
-          speed: 0,
+          loaded,
+          total,
+          speed,
+          eta: speed > 0 && total > loaded ? (total - loaded) / speed : null,
           status: "downloading",
           mode: "native",
+          _speedAt: now,
         });
       }
     } catch {
@@ -459,21 +562,7 @@ async function pumpQueue() {
   for (const job of queued) startJob(job.id);
 }
 
-function chooseMode(settings, probedSize, ranged) {
-  const mode = settings.downloadMode || "auto";
-  if (mode === "native") return "native";
-  if (mode === "accelerate") return "accelerate";
-  // auto
-  if (
-    ranged &&
-    probedSize >= ACCEL_MIN &&
-    probedSize <= ACCEL_MAX &&
-    (settings.connections || 8) > 1
-  ) {
-    return "accelerate";
-  }
-  return "native";
-}
+/* routing via resolveRoute() in lib/domain-rules.js */
 
 async function ensureOffscreen() {
   try {
@@ -537,41 +626,14 @@ async function startJob(id) {
 
     pausedIds.delete(id);
     const settings = await getSettings();
+    const st = await refreshHelperStatus(true);
+    const helperConnected = Boolean(st?.connected);
     const helperSite = isHelperSiteUrl(job.url);
-    const wantHelper =
-      job.forceHelper ||
-      settings.useNativeHelper === true ||
-      (settings.useNativeHelper !== false && helperSite);
 
-    if (wantHelper) {
-      const st = await refreshHelperStatus(true);
-      if (st?.connected) {
-        await updateJob(id, {
-          status: "downloading",
-          error: null,
-          speed: 0,
-          mode: helperSite ? "ytdlp" : "native-helper",
-          filename: sanitizeFilename(
-            job.filename || guessFilename(job.url, null)
-          ),
-        });
-        await startHelperJob(id, settings, helperSite ? "ytdlp" : "auto");
-        return;
-      }
-      if (helperSite) {
-        await updateJob(id, {
-          status: "error",
-          error:
-            "Cần PulseDM Helper + yt-dlp. Xem Options → Native Helper (install-mac.sh).",
-        });
-        return;
-      }
-      // fall through to browser modes
-    }
-
+    const authHeaders = await jobAuthHeaders(job, settings);
     let probed = null;
     try {
-      probed = await probe(job.url);
+      probed = await probe(job.url, authHeaders);
     } catch {
       probed = null;
     }
@@ -580,13 +642,46 @@ async function startJob(id) {
       isProbablyHls(job.url) ||
       guessMediaKind(job.url, probed?.contentType || "") === "hls";
 
-    const mode = isHls
-      ? "hls"
-      : chooseMode(
-          settings,
-          probed?.size || job.total || 0,
-          Boolean(probed?.ranged)
-        );
+    let route = resolveRoute({
+      url: job.url,
+      settings,
+      forceHelper: job.forceHelper,
+      kind: isHls ? "hls" : job.kind,
+      probedSize: probed?.size || job.total || 0,
+      ranged: Boolean(probed?.ranged),
+      helperConnected,
+    });
+
+    if (route === "helper") {
+      if (helperConnected) {
+        const engine =
+          helperSite || isHls || isProbablyHls(job.url) ? "ytdlp" : "auto";
+        await updateJob(id, {
+          status: "downloading",
+          error: null,
+          speed: 0,
+          mode: engine === "ytdlp" ? "ytdlp" : "native-helper",
+          kind: isHls ? "hls" : job.kind,
+          total: probed?.size || job.total || 0,
+          filename: sanitizeFilename(
+            job.filename || probed?.filename || guessFilename(job.url, null)
+          ),
+        });
+        await startHelperJob(id, settings, engine, authHeaders);
+        return;
+      }
+      if (helperSite || job.forceHelper) {
+        await updateJob(id, {
+          status: "error",
+          error:
+            "Cần PulseDM Helper + yt-dlp. Xem Options → Native Helper.",
+        });
+        return;
+      }
+      route = isHls ? "hls" : "accelerate";
+    }
+
+    const mode = route === "auto" ? "native" : route;
 
     await updateJob(id, {
       status: "downloading",
@@ -601,11 +696,11 @@ async function startJob(id) {
     });
 
     if (mode === "hls") {
-      await startHlsJob(id, settings);
+      await startHlsJob(id, settings, authHeaders);
     } else if (mode === "native") {
       await startNativeJob(id);
     } else {
-      await startAcceleratedJob(id, settings);
+      await startAcceleratedJob(id, settings, authHeaders);
     }
   } finally {
     startingIds.delete(id);
@@ -615,13 +710,16 @@ async function startJob(id) {
 /**
  * Native host download (multi-conn disk / yt-dlp). Promise resolves when done/error.
  */
-function startHelperJob(id, settings, engine = "auto") {
+function startHelperJob(id, settings, engine = "auto", headers = {}) {
   return new Promise(async (resolve) => {
     const job = (await getJobs()).find((j) => j.id === id);
     if (!job) {
       resolve();
       return;
     }
+
+    let lastTick = Date.now();
+    let lastLoaded = 0;
 
     const handle = startNativePortJob(
       {
@@ -632,6 +730,8 @@ function startHelperJob(id, settings, engine = "auto") {
         connections: settings.connections,
         engine,
         outDir: settings.helperDownloadDir || "",
+        headers,
+        referrer: job.referrer || headers.Referer || "",
       },
       async (msg) => {
         if (!msg) return;
@@ -640,12 +740,34 @@ function startHelperJob(id, settings, engine = "auto") {
             status: "downloading",
             mode: msg.mode || engine,
             speed: 0,
+            eta: null,
           };
           if (msg.loaded != null) patch.loaded = msg.loaded;
           if (msg.total != null) patch.total = msg.total;
-          if (msg.percent != null && !msg.total) {
+          if (msg.percent != null && !(msg.total > 0)) {
             patch.loaded = Math.round(msg.percent);
             patch.total = 100;
+          }
+          const now = Date.now();
+          const dt = (now - lastTick) / 1000;
+          if (msg.loaded != null && dt >= 0.25) {
+            const delta = msg.loaded - lastLoaded;
+            if (delta >= 0) patch.speed = delta / dt;
+            lastTick = now;
+            lastLoaded = msg.loaded;
+            if (patch.total > 0 && patch.speed > 0) {
+              patch.eta = (patch.total - patch.loaded) / patch.speed;
+            }
+          } else if (msg.percent != null && dt >= 0.25) {
+            // yt-dlp percent-only: estimate speed from % delta as synthetic
+            const cur = Number(msg.percent) || 0;
+            const prevPct = lastLoaded;
+            const dPct = cur - prevPct;
+            if (dPct > 0) {
+              patch.speed = (dPct / 100) * 8 * 1024 * 1024; // rough visual
+            }
+            lastTick = now;
+            lastLoaded = cur;
           }
           if (msg.message) patch.error = null;
           scheduleProgressWrite(id, patch);
@@ -721,18 +843,29 @@ async function startNativeJob(id) {
   }
 }
 
-async function startHlsJob(id, settings) {
+async function startHlsJob(id, settings, headers = {}) {
   const job = (await getJobs()).find((j) => j.id === id);
   if (!job) return;
 
   const controller = new AbortController();
   controllers.set(id, controller);
+  let dnrId = null;
 
   try {
+    if (job.referrer) {
+      dnrId = await installRefererRule(job.url, job.referrer);
+    }
     const result = await downloadHlsToBuffer({
       playlistUrl: job.url,
-      headers: {},
+      headers,
       signal: controller.signal,
+      loadSegment: async (i) => {
+        const row = await getSegment(id, i);
+        return row?.buffer || null;
+      },
+      saveSegment: async (i, buffer) => {
+        await putSegment(id, i, buffer, { start: i, end: i });
+      },
       onProgress: (p) => {
         scheduleProgressWrite(id, {
           loaded: p.loaded,
@@ -748,7 +881,7 @@ async function startHlsJob(id, settings) {
       },
     });
 
-    const fname = sanitizeFilename(
+    let fname = sanitizeFilename(
       job.filename?.replace(/\.m3u8$/i, ".ts") || result.filenameHint
     );
     await putSegment(id, 0, result.buffer, {
@@ -778,6 +911,27 @@ async function startHlsJob(id, settings) {
     }
     if (lastErr) throw lastErr;
 
+    // Prefer remux .ts → .mp4 via helper ffmpeg when available
+    let localPath = null;
+    let finalName = saveRes.filename || fname;
+    let finalExt = "ts";
+    const st = await refreshHelperStatus(false);
+    if (st?.connected && st?.ffmpegReady && saveRes?.downloadId != null) {
+      try {
+        const [item] = await chrome.downloads.search({ id: saveRes.downloadId });
+        if (item?.filename) {
+          const remuxed = await remuxNativePath(item.filename);
+          if (remuxed?.ok && remuxed.path) {
+            localPath = remuxed.path;
+            finalName = sanitizeFilename(remuxed.filename || finalName.replace(/\.ts$/i, ".mp4"));
+            finalExt = "mp4";
+          }
+        }
+      } catch {
+        /* keep .ts */
+      }
+    }
+
     const doneJob = await updateJob(id, {
       status: "completed",
       loaded: saveRes.size || result.size,
@@ -785,13 +939,14 @@ async function startHlsJob(id, settings) {
       speed: 0,
       eta: 0,
       connections: 1,
-      filename: saveRes.filename || fname,
+      filename: finalName,
       category: "video",
-      ext: "ts",
+      ext: finalExt,
       chromeDownloadId: saveRes.downloadId,
+      localPath,
       completedAt: Date.now(),
       error: null,
-      mode: "hls",
+      mode: finalExt === "mp4" ? "hls-mp4" : "hls",
     });
     await pushHistory(doneJob);
     if (settings.showNotifications) {
@@ -817,6 +972,7 @@ async function startHlsJob(id, settings) {
       });
     }
   } finally {
+    await removeRefererRule(dnrId);
     controllers.delete(id);
     const t = progressTimers.get(id);
     if (t) clearTimeout(t);
@@ -825,18 +981,22 @@ async function startHlsJob(id, settings) {
   }
 }
 
-async function startAcceleratedJob(id, settings) {
+async function startAcceleratedJob(id, settings, headers = {}) {
   const job = (await getJobs()).find((j) => j.id === id);
   if (!job) return;
 
   const controller = new AbortController();
   controllers.set(id, controller);
+  let dnrId = null;
 
   try {
+    if (job.referrer) {
+      dnrId = await installRefererRule(job.url, job.referrer);
+    }
     const result = await downloadMulti({
       jobId: id,
       url: job.url,
-      headers: {},
+      headers,
       connections: settings.connections,
       speedLimit: Number(settings.speedLimit) || 0,
       signal: controller.signal,
@@ -945,6 +1105,7 @@ async function startAcceleratedJob(id, settings) {
       });
     }
   } finally {
+    await removeRefererRule(dnrId);
     controllers.delete(id);
     const t = progressTimers.get(id);
     if (t) clearTimeout(t);
@@ -964,8 +1125,24 @@ async function pushHistory(job) {
     size: job.total,
     completedAt: job.completedAt || Date.now(),
     chromeDownloadId: job.chromeDownloadId,
+    localPath: job.localPath || null,
+    mode: job.mode || null,
+    referrer: job.referrer || "",
   });
   await saveHistory(history);
+
+  // Media Ledger (searchable kho)
+  try {
+    const entry = ledgerEntryFromJob(job, {
+      source: job.forceHelper ? "intent-helper" : job.mode || "download",
+      pageTitle: job.pageTitle || "",
+    });
+    await upsertLedgerEntry(entry);
+    const ledger = await loadLedger();
+    broadcast({ type: "ledger-updated", ledger });
+  } catch {
+    /* ignore ledger errors */
+  }
 }
 
 async function pauseJob(id) {
@@ -1115,6 +1292,12 @@ async function scheduleJob(id, scheduledAt) {
 
 async function openDownload(id) {
   const job = (await getJobs()).find((j) => j.id === id);
+  const hist = (await getHistory()).find((h) => h.id === id);
+  const local = job?.localPath || hist?.localPath;
+  if (local) {
+    const res = await openNativePath(local, false);
+    if (res?.ok) return { ok: true };
+  }
   if (job?.chromeDownloadId != null) {
     try {
       await chrome.downloads.open(job.chromeDownloadId);
@@ -1123,7 +1306,6 @@ async function openDownload(id) {
       return { error: e?.message || String(e) };
     }
   }
-  const hist = (await getHistory()).find((h) => h.id === id);
   if (hist?.chromeDownloadId != null) {
     try {
       await chrome.downloads.open(hist.chromeDownloadId);
@@ -1137,12 +1319,17 @@ async function openDownload(id) {
 
 async function showInFolder(id) {
   const job = (await getJobs()).find((j) => j.id === id);
+  const hist = (await getHistory()).find((h) => h.id === id);
+  const local = job?.localPath || hist?.localPath;
+  if (local) {
+    const res = await openNativePath(local, true);
+    if (res?.ok) return { ok: true };
+  }
   const dlId = job?.chromeDownloadId;
   if (dlId != null) {
     await chrome.downloads.show(dlId);
     return { ok: true };
   }
-  const hist = (await getHistory()).find((h) => h.id === id);
   if (hist?.chromeDownloadId != null) {
     await chrome.downloads.show(hist.chromeDownloadId);
     return { ok: true };
@@ -1151,12 +1338,20 @@ async function showInFolder(id) {
 }
 
 async function exportData() {
-  const [jobs, history, settings] = await Promise.all([
+  const [jobs, history, settings, ledger] = await Promise.all([
     getJobs(),
     getHistory(),
     getSettings(),
+    loadLedger(),
   ]);
-  return { version: 2, exportedAt: Date.now(), jobs, history, settings };
+  return {
+    version: 3,
+    exportedAt: Date.now(),
+    jobs,
+    history,
+    ledger,
+    settings,
+  };
 }
 
 async function importData(payload) {
@@ -1170,8 +1365,213 @@ async function importData(payload) {
   }
   if (Array.isArray(payload.jobs)) await saveJobs(payload.jobs);
   if (Array.isArray(payload.history)) await saveHistory(payload.history);
+  if (Array.isArray(payload.ledger)) await saveLedger(payload.ledger);
+  else if (Array.isArray(payload.history) && !(await loadLedger()).length) {
+    // migrate history → ledger once
+    for (const h of payload.history.slice().reverse()) {
+      await upsertLedgerEntry(
+        ledgerEntryFromJob(
+          { ...h, total: h.size, completedAt: h.completedAt },
+          { source: "import" }
+        )
+      );
+    }
+  }
   pumpQueue();
   return { ok: true };
+}
+
+async function askTabIntentDom(tabId) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, { type: "probe-intent-dom" });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Intent Capture probe: playing DOM + network sniff + HLS qualities.
+ */
+async function probeIntent(tabId = null) {
+  let tab = null;
+  if (tabId != null) {
+    try {
+      tab = await chrome.tabs.get(tabId);
+    } catch {
+      tab = null;
+    }
+  }
+  if (!tab) {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    tab = tabs[0] || null;
+  }
+  if (!tab?.id) {
+    return { ok: false, error: "Không có tab đang mở" };
+  }
+  if (!tab.url || !(tab.url.startsWith("http://") || tab.url.startsWith("https://"))) {
+    return { ok: false, error: "Tab này không phải trang web" };
+  }
+
+  // Refresh DOM report into sniffer map
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: "ping-dom-media" });
+  } catch {
+    /* content script may be missing on chrome:// */
+  }
+
+  const domRes = await askTabIntentDom(tab.id);
+  const network = listTabMedia(tab.id);
+  const probes = domRes?.probes || [];
+  const intent = resolveIntent(probes, network);
+
+  // MSE / blob: player đang phát nhưng không có URL http trực tiếp
+  const mseBlob = probes.some(
+    (p) =>
+      p.playing &&
+      (p.isBlob ||
+        !p.currentSrc ||
+        String(p.currentSrc).startsWith("blob:") ||
+        String(p.currentSrc).startsWith("mediasource:"))
+  );
+
+  let variants = [];
+  const hlsCandidate =
+    intent.candidates.find((c) => c.kind === "hls" || isProbablyHls(c.url)) ||
+    (intent.best && isProbablyHls(intent.best.url) ? intent.best : null);
+
+  if (hlsCandidate?.url) {
+    try {
+      const settings = await getSettings();
+      const headers = await buildDownloadHeaders({
+        url: hlsCandidate.url,
+        referrer: hlsCandidate.referrer || tab.url,
+        useCookies: settings.useTabAuth !== false,
+      });
+      const listed = await listHlsVariants(hlsCandidate.url, headers);
+      if (!listed.encrypted) variants = listed.variants || [];
+    } catch {
+      variants = [];
+    }
+  }
+
+  // Page-level helper (YT/FB/…) hoặc MSE-only → ưu tiên URL trang qua yt-dlp
+  const pageIsHelper = isHelperSiteUrl(tab.url);
+  if (pageIsHelper || (mseBlob && !intent.candidates.length)) {
+    intent.candidates.unshift({
+      url: tab.url,
+      kind: "page",
+      source: "page",
+      score: 2500,
+      playing: intent.playing || mseBlob,
+      referrer: tab.url,
+      filename: sanitizeFilename(tab.title || "page-video"),
+      label: mseBlob
+        ? "Trang (MSE/blob → Helper)"
+        : "Trang (Helper / yt-dlp)",
+    });
+    intent.best = intent.candidates[0];
+  } else if (mseBlob && network.length) {
+    // Có sniff mạng kèm MSE — ưu tiên candidate mạng lớn nhất
+    const netBest = [...network].sort(
+      (a, b) => (b.size || 0) - (a.size || 0)
+    )[0];
+    if (netBest?.url && (!intent.best || intent.best.score < 900)) {
+      intent.best = {
+        ...netBest,
+        score: 1800,
+        label: netBest.sizeLabel
+          ? `Sniff · ${netBest.sizeLabel}`
+          : "Sniff mạng",
+      };
+      intent.candidates.unshift(intent.best);
+    }
+  }
+
+  let qualities = buildQualityOptions({
+    variants,
+    best: intent.best,
+    candidates: intent.candidates,
+  }).filter((q) => q?.url && q?.label);
+
+  // Không để dropdown rỗng / option vô nghĩa
+  if (qualities.length === 1 && qualities[0].id === "auto" && !qualities[0].url) {
+    qualities = [];
+  }
+
+  return {
+    ok: true,
+    tabId: tab.id,
+    pageUrl: tab.url,
+    pageTitle: tab.title || domRes?.pageTitle || "",
+    playing: intent.playing || mseBlob,
+    mseBlob,
+    best: intent.best,
+    candidates: intent.candidates.slice(0, 12),
+    qualities,
+    helperSite: pageIsHelper || (mseBlob && pageIsHelper),
+    needsHelper: pageIsHelper || mseBlob,
+  };
+}
+
+async function intentCapture({ tabId = null, qualityId = "auto", url = null } = {}) {
+  const probe = await probeIntent(tabId);
+  if (!probe.ok) return probe;
+
+  let chosen = null;
+  if (url) {
+    chosen = { url, kind: isProbablyHls(url) ? "hls" : "video", label: "custom" };
+  } else if (qualityId && qualityId !== "auto") {
+    chosen = (probe.qualities || []).find((q) => q.id === qualityId) || null;
+  }
+  if (!chosen) {
+    chosen = (probe.qualities || []).find((q) => q.id === "auto") ||
+      probe.qualities?.[0] ||
+      probe.best;
+  }
+  if (!chosen?.url) {
+    return {
+      ok: false,
+      error: probe.mseBlob
+        ? "Video MSE/blob — cần Helper + yt-dlp (popup → Script/Copy để cài), rồi thử lại."
+        : "Chưa bắt được media đang phát. Phát video rồi thử lại (hoặc Quét media).",
+      probe,
+    };
+  }
+
+  const forceHelper =
+    probe.helperSite ||
+    probe.needsHelper ||
+    chosen.kind === "page" ||
+    isHelperSiteUrl(chosen.url) ||
+    isProbablyHls(chosen.url);
+
+  const filename = sanitizeFilename(
+    probe.pageTitle ||
+      probe.best?.filename ||
+      guessFilename(chosen.url, null) ||
+      "intent-media"
+  );
+
+  const job = await enqueueDownload({
+    url: chosen.url,
+    filename,
+    referrer: probe.pageUrl || "",
+    forceHelper,
+  });
+  if (job?.id) {
+    await updateJob(job.id, {
+      pageTitle: probe.pageTitle || "",
+      source: "intent",
+    });
+  }
+
+  return {
+    ok: true,
+    message: `Đã xếp hàng: ${chosen.label || filename}`,
+    job,
+    chosen,
+    probe: { playing: probe.playing, qualities: probe.qualities },
+  };
 }
 
 chrome.alarms.onAlarm.addListener((a) => {
@@ -1192,19 +1592,37 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     switch (msg?.type) {
       case "get-state": {
-        const [jobs, settings, history, helper] = await Promise.all([
+        const [jobs, settings, history, helper, ledger] = await Promise.all([
           getJobs(),
           getSettings(),
           getHistory(),
           refreshHelperStatus(false),
+          loadLedger(),
         ]);
         return {
           jobs,
           settings,
           history,
+          ledger,
           helper,
           extensionId: chrome.runtime.id,
         };
+      }
+      case "get-ledger": {
+        const all = await loadLedger();
+        if (msg.query) return { ledger: searchLedger(all, msg.query) };
+        return { ledger: all };
+      }
+      case "clear-ledger":
+        await saveLedger([]);
+        broadcast({ type: "ledger-updated", ledger: [] });
+        return { ok: true };
+      case "remove-ledger": {
+        const all = await loadLedger();
+        await saveLedger(all.filter((e) => e.id !== msg.id));
+        const ledger = await loadLedger();
+        broadcast({ type: "ledger-updated", ledger });
+        return { ok: true };
       }
       case "native-status":
         return refreshHelperStatus(true);
@@ -1220,6 +1638,23 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           referrer: tab.url,
           forceHelper: true,
         });
+      }
+      case "probe-intent":
+        return probeIntent(msg.tabId);
+      case "intent-capture":
+        return intentCapture({
+          tabId: msg.tabId,
+          qualityId: msg.qualityId || "auto",
+          url: msg.url || null,
+        });
+      case "probe-bandwidth": {
+        try {
+          return await probeDownloadBandwidth({
+            bytes: Number(msg.bytes) || 1_500_000,
+          });
+        } catch (e) {
+          return { error: e?.message || String(e) };
+        }
       }
       case "add-download":
         return enqueueDownload({
@@ -1246,9 +1681,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       case "download-tab-media": {
         const tabId = Number(msg.tabId);
         const items = listTabMedia(tabId);
+        const byUrl = new Map(items.map((i) => [i.url, i]));
         const urls = (msg.urls || items.map((i) => i.url)).filter(Boolean);
         const pageUrl = msg.referrer || _sender?.tab?.url || "";
-        return enqueueBatch(urls, { referrer: pageUrl });
+        const results = [];
+        for (const url of urls) {
+          const it = byUrl.get(url);
+          try {
+            results.push(
+              await enqueueDownload({
+                url,
+                filename: it?.filename || "",
+                referrer: it?.referrer || pageUrl,
+              })
+            );
+          } catch (e) {
+            results.push({ url, error: e?.message || String(e) });
+          }
+        }
+        return results;
       }
       case "get-active-tab-media": {
         const [tab] = await chrome.tabs.query({

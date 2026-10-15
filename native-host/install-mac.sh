@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Install PulseDM native host for Chrome + Edge on macOS.
+# Install PulseDM native host for Chrome + Edge on macOS (Go binary — no Python required).
 # Usage:
 #   ./native-host/install-mac.sh <EXTENSION_ID>
-# Get EXTENSION_ID from edge://extensions → PulseDM → ID (Developer mode on)
 
 set -euo pipefail
 
@@ -14,19 +13,37 @@ if [[ -z "$EXT_ID" ]]; then
 fi
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-HOST_SRC="$ROOT/pulsedm_host.py"
 INSTALL_DIR="${HOME}/.pulsedm"
-HOST_BIN="${INSTALL_DIR}/pulsedm_host.py"
 JSON_NAME="com.pulsedm.host.json"
+ARCH="$(uname -m)"
+if [[ "$ARCH" == "arm64" ]]; then
+  SRC_BIN="$ROOT/bin/pulsedm_host-darwin-arm64"
+else
+  SRC_BIN="$ROOT/bin/pulsedm_host-darwin-amd64"
+fi
 
-mkdir -p "$INSTALL_DIR"
-cp "$HOST_SRC" "$HOST_BIN"
-chmod +x "$HOST_BIN"
+# Fallback: build on the fly if Go available and binary missing
+if [[ ! -f "$SRC_BIN" ]]; then
+  if command -v go >/dev/null 2>&1 || [[ -x "$ROOT/../../.tools/go/bin/go" ]] || [[ -x "$ROOT/../.tools/go/bin/go" ]]; then
+    echo "Building macOS host…"
+    export PATH="${ROOT}/../../.tools/go/bin:${ROOT}/../.tools/go/bin:${PATH:-}"
+    mkdir -p "$ROOT/bin"
+    (cd "$ROOT/go" && CGO_ENABLED=0 go build -ldflags="-s -w" -o "$SRC_BIN" .)
+  fi
+fi
 
-# Ensure shebang works with python3
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "Cần python3. Cài: brew install python"
-  exit 1
+# Legacy Python fallback
+if [[ ! -f "$SRC_BIN" ]]; then
+  echo "WARN: không thấy $SRC_BIN — fallback pulsedm_host.py (cần python3)"
+  HOST_BIN="${INSTALL_DIR}/pulsedm_host.py"
+  mkdir -p "$INSTALL_DIR"
+  cp "$ROOT/pulsedm_host.py" "$HOST_BIN"
+  chmod +x "$HOST_BIN"
+else
+  HOST_BIN="${INSTALL_DIR}/pulsedm_host"
+  mkdir -p "$INSTALL_DIR"
+  cp "$SRC_BIN" "$HOST_BIN"
+  chmod +x "$HOST_BIN"
 fi
 
 TMP_JSON="$(mktemp)"
@@ -40,15 +57,11 @@ register() {
   echo "Registered: ${dir}/${JSON_NAME}"
 }
 
-# Chrome
 register "${HOME}/Library/Application Support/Google/Chrome/NativeMessagingHosts"
-# Chrome Canary / Chromium (optional)
 [[ -d "${HOME}/Library/Application Support/Google/Chrome Canary" ]] && \
   register "${HOME}/Library/Application Support/Google/Chrome Canary/NativeMessagingHosts" || true
 [[ -d "${HOME}/Library/Application Support/Chromium" ]] && \
   register "${HOME}/Library/Application Support/Chromium/NativeMessagingHosts" || true
-
-# Microsoft Edge
 register "${HOME}/Library/Application Support/Microsoft Edge/NativeMessagingHosts"
 [[ -d "${HOME}/Library/Application Support/Microsoft Edge Beta" ]] && \
   register "${HOME}/Library/Application Support/Microsoft Edge Beta/NativeMessagingHosts" || true
@@ -56,15 +69,11 @@ register "${HOME}/Library/Application Support/Microsoft Edge/NativeMessagingHost
 rm -f "$TMP_JSON"
 
 echo ""
-echo "✅ Native host installed."
-echo "   Host: $HOST_BIN"
-echo "   Ext : $EXT_ID"
+echo "OK Native host installed (Mac Go binary)."
+echo "  Host: $HOST_BIN"
+echo "  Ext : $EXT_ID"
 echo ""
-echo "Optional (YouTube/Facebook/…):"
-echo "   brew install yt-dlp"
-echo "   yt-dlp -U"
-echo ""
-echo "Reload PulseDM in edge://extensions then open popup → check Helper."
+echo "Optional: brew install yt-dlp ffmpeg"
+echo "Reload PulseDM rồi mở popup → Helper."
 
-# Self-test
-python3 "$HOST_BIN" --status || true
+"$HOST_BIN" --status 2>/dev/null || python3 "$HOST_BIN" --status 2>/dev/null || true

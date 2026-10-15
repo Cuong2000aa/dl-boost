@@ -7,6 +7,25 @@ function send(type, payload = {}) {
   return chrome.runtime.sendMessage({ type, ...payload });
 }
 
+function rulesToText(rules) {
+  return (rules || [])
+    .map((r) => `${r.host}|${r.mode}`)
+    .join("\n");
+}
+
+function textToRules(text) {
+  return String(text || "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [host, mode] = line.split("|").map((s) => s.trim());
+      if (!host || !mode) return null;
+      return { host, mode: mode.toLowerCase() };
+    })
+    .filter(Boolean);
+}
+
 function fill(settings) {
   const s = { ...defaultSettings, ...settings };
   form.downloadMode.value = s.downloadMode || "auto";
@@ -21,6 +40,12 @@ function fill(settings) {
   form.networkSnifferEnabled.checked = s.networkSnifferEnabled !== false;
   form.snifferAutoShow.checked = Boolean(s.snifferAutoShow);
   form.useNativeHelper.checked = s.useNativeHelper !== false;
+  form.useTabAuth.checked = s.useTabAuth !== false;
+  form.helperOffloadMinMB.value = s.helperOffloadMinMB ?? 200;
+  form.helperDownloadDir.value = s.helperDownloadDir || "";
+  form.domainRulesText.value = rulesToText(
+    s.domainRules?.length ? s.domainRules : defaultSettings.domainRules
+  );
   form.showNotifications.checked = Boolean(s.showNotifications);
   form.autoOpenManagerOnAdd.checked = Boolean(s.autoOpenManagerOnAdd);
 }
@@ -39,6 +64,13 @@ function readForm() {
     networkSnifferEnabled: form.networkSnifferEnabled.checked,
     snifferAutoShow: form.snifferAutoShow.checked,
     useNativeHelper: form.useNativeHelper.checked,
+    useTabAuth: form.useTabAuth.checked,
+    helperOffloadMinMB: Math.max(
+      50,
+      Math.min(10240, Number(form.helperOffloadMinMB.value) || 200)
+    ),
+    helperDownloadDir: form.helperDownloadDir.value.trim(),
+    domainRules: textToRules(form.domainRulesText.value),
     showNotifications: form.showNotifications.checked,
     autoOpenManagerOnAdd: form.autoOpenManagerOnAdd.checked,
   };
@@ -94,6 +126,6 @@ if (hint && helper?.connected) {
     "beforeend",
     `<br><strong style="color:#2dd4bf">Helper đang chạy</strong>${
       helper.ytdlpReady ? " · yt-dlp OK" : " · chưa có yt-dlp"
-    }`
+    }${helper.ffmpegReady ? " · ffmpeg OK" : ""}`
   );
 }

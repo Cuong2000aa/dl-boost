@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# PulseDM CLI wrapper — finds native-host binary and forwards args.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BIN_DIR="$ROOT/native-host/bin"
+
+pick_bin() {
+  local arch
+  arch="$(uname -m)"
+  case "$(uname -s)" in
+    Darwin)
+      if [[ "$arch" == "arm64" ]]; then
+        echo "$BIN_DIR/pulsedm_host-darwin-arm64"
+      else
+        echo "$BIN_DIR/pulsedm_host-darwin-amd64"
+      fi
+      ;;
+    Linux)
+      if [[ "$arch" == "aarch64" || "$arch" == "arm64" ]]; then
+        echo "$BIN_DIR/pulsedm_host-linux-arm64"
+      else
+        echo "$BIN_DIR/pulsedm_host-linux-amd64"
+      fi
+      ;;
+    MINGW*|MSYS*|CYGWIN*|Windows_NT)
+      echo "$BIN_DIR/pulsedm_host-windows-amd64.exe"
+      ;;
+    *)
+      echo "$BIN_DIR/pulsedm_host" 
+      ;;
+  esac
+}
+
+BIN="$(pick_bin)"
+if [[ ! -x "$BIN" ]]; then
+  # Installed copy (macOS/Windows install scripts)
+  if [[ -x "$HOME/Library/Application Support/PulseDM/native-host/pulsedm_host" ]]; then
+    BIN="$HOME/Library/Application Support/PulseDM/native-host/pulsedm_host"
+  elif [[ -x "${LOCALAPPDATA:-}/PulseDM/native-host/pulsedm_host.exe" ]]; then
+    BIN="${LOCALAPPDATA}/PulseDM/native-host/pulsedm_host.exe"
+  else
+    echo "pulsedm: native host binary not found at $BIN" >&2
+    echo "Build: ./native-host/build-win.sh  (or rebuild go for your OS)" >&2
+    exit 127
+  fi
+fi
+
+if [[ $# -eq 0 ]]; then
+  exec "$BIN" --help
+fi
+exec "$BIN" "$@"

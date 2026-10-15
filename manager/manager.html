@@ -13,7 +13,7 @@
           <img src="../icons/icon48.png" alt="" width="36" height="36" />
           <div>
             <strong>PulseDM</strong>
-            <span>v2 · Download Manager</span>
+            <span>v2.5.1 · Download Manager</span>
           </div>
         </div>
         <nav id="cats" class="cats"></nav>
@@ -28,20 +28,29 @@
           <div class="tabs" id="tabs">
             <button data-tab="downloads" class="active">Tải xuống</button>
             <button data-tab="batch">Batch URL</button>
+            <button data-tab="ledger">Kho</button>
             <button data-tab="history">Lịch sử</button>
           </div>
           <div class="toolbar-actions">
-            <input id="search" type="search" placeholder="Tìm tên / URL…" />
+            <input id="search" type="search" placeholder="Tìm tên / URL / nguồn…" />
             <button id="clearFinished" class="ghost" type="button">Xóa đã xong</button>
           </div>
         </header>
 
         <section class="hero-stats" id="heroStats">
-          <div><em id="bigSpeed">0 B/s</em><span>tốc độ tổng</span></div>
+          <div>
+            <em id="bigSpeed">0 B/s</em>
+            <span>live ↓ · <b id="bigMbps">0 Mbps</b></span>
+          </div>
           <div><em id="bigActive">0</em><span>đang chạy</span></div>
           <div><em id="bigQueued">0</em><span>hàng đợi</span></div>
-          <div><em id="bigDone">0</em><span>hoàn tất</span></div>
+          <div class="hero-probe">
+            <em id="probeMbps">—</em>
+            <span>đo mạng</span>
+            <button type="button" id="probeNetBtn" class="probe-btn">Đo ngay</button>
+          </div>
         </section>
+        <p class="net-probe-hint" id="probeHint">Live = tốc độ tải PulseDM. “Đo ngay” ước lượng bandwidth ↓ (~1.5MB).</p>
 
         <section id="panel-downloads" class="panel">
           <form id="addForm" class="add">
@@ -79,6 +88,28 @@
             <button id="pasteClipboard" type="button" class="ghost">Dán từ clipboard</button>
           </div>
           <p id="batchResult" class="hint"></p>
+        </section>
+
+        <section id="panel-ledger" class="panel hidden">
+          <p class="hint">Kho media đã tải — tìm theo tên, URL, mode, fingerprint. File mới hoàn tất tự vào đây.</p>
+          <div class="toolbar-actions" style="margin-bottom: 12px">
+            <button id="clearLedger" type="button" class="ghost">Xóa kho</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tên tệp</th>
+                  <th>Nguồn</th>
+                  <th>Kích thước</th>
+                  <th>Hoàn tất</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="ledgerBody"></tbody>
+            </table>
+            <p id="ledgerEmpty" class="empty">Kho trống — tải xong một file sẽ xuất hiện ở đây.</p>
+          </div>
         </section>
 
         <section id="panel-history" class="panel hidden">

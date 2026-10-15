@@ -93,14 +93,32 @@
             <input name="useNativeHelper" type="checkbox" />
             Dùng Helper trên máy (Mac/Win + yt-dlp cho YT/FB/…)
           </label>
+          <label class="check">
+            <input name="useTabAuth" type="checkbox" />
+            Gắn Referer + cookie tab khi tải URL đã sniff
+          </label>
+          <label>
+            Offload file lớn sang Helper (MB)
+            <input name="helperOffloadMinMB" type="number" min="50" max="10240" />
+          </label>
+          <label>
+            Thư mục Helper (để trống = Downloads/PulseDM)
+            <input name="helperDownloadDir" type="text" placeholder="" />
+          </label>
           <p class="hint" id="helperHint">
-            <strong>Mac:</strong> <code>./native-host/install-mac.sh &lt;ID&gt;</code> rồi <code>brew install yt-dlp</code><br />
-            <strong>Windows (PowerShell):</strong>
-            <code>.\native-host\install-win.ps1 -ExtensionId &lt;ID&gt;</code> (Win: .exe, không cần Python)
-            rồi <code>winget install yt-dlp.yt-dlp</code><br />
-            File: ~/Downloads/PulseDM (Mac) hoặc %USERPROFILE%\Downloads\PulseDM (Win)
+            <strong>Mac:</strong> <code>./native-host/install-mac.sh &lt;ID&gt;</code> rồi <code>brew install yt-dlp ffmpeg</code><br />
+            <strong>Windows:</strong>
+            <code>.\native-host\install-win.ps1 -ExtensionId &lt;ID&gt;</code> (không cần Python)
+            rồi <code>winget install yt-dlp.yt-dlp Gyan.FFmpeg</code><br />
+            File lớn / HLS / YT → Helper ghi đĩa + yt-dlp ra MP4
           </p>
           <p class="hint">Extension ID: <code id="extIdLabel">…</code></p>
+        </section>
+
+        <section class="span2">
+          <h2>Rule theo domain</h2>
+          <p class="hint">Mỗi dòng: <code>host|mode</code> — mode = helper · accelerate · native · hls · auto</p>
+          <textarea name="domainRulesText" rows="6" placeholder="youtube.com|helper&#10;cdn.example.com|accelerate"></textarea>
         </section>
 
         <section>

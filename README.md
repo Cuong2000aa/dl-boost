@@ -1,25 +1,30 @@
-# PulseDM v2.3.2
+# PulseDM v2.5.1
 
 Extension Edge/Chrome kiểu **IDM** + **Native Helper (Mac & Windows)**.
 
-- Trong browser: bắt media, HLS, đa kết nối, resume, grabber  
-- Ngoài browser: Helper gọi **yt-dlp** để tải YouTube/Facebook/…
+- **Intent Capture** — “Tải đang phát”  
+- **Media Ledger (Kho)** — tìm file đã tải theo tên/URL/nguồn  
+- Helper: Copy lệnh / tải script cài (ID sẵn)  
+- Sniffer + auth tab, đa kết nối, offload file lớn, HLS→MP4  
+- Network meter live + đo bandwidth  
 
 Xem cài Helper: [`native-host/README.md`](native-host/README.md)
 
-**Windows:** `.\native-host\install-win.ps1 -ExtensionId <ID>` (đã có `.exe`, **không cần Python**) rồi `winget install yt-dlp.yt-dlp`  
-**Mac:** `./native-host/install-mac.sh <ID>` rồi `brew install yt-dlp`
+**Windows:** `.\native-host\install-win.ps1 -ExtensionId <ID>` rồi `winget install yt-dlp.yt-dlp Gyan.FFmpeg`  
+**Mac:** `./native-host/install-mac.sh <ID>` rồi `brew install yt-dlp ffmpeg`
 
 ## Tính năng
 
 | Nhóm | Chi tiết |
 |------|----------|
-| Native Helper | App nhỏ Mac/Win + `yt-dlp` (YT/FB/…) → Downloads/PulseDM |
-| Tăng tốc | HTTP Range, 1–16 kết nối, giới hạn tốc độ (KB/s) |
-| Resume | Segment IndexedDB + offscreen save |
+| Native Helper | Go `.exe`/Mac binary + yt-dlp/ffmpeg → Downloads/PulseDM |
+| Tăng tốc | HTTP Range 1–16, resume mid-part, rate limit |
+| Auth sniff | Referer + cookie tab + DNR Referer |
+| HLS | yt-dlp→MP4 ưu tiên; fallback TS + remux ffmpeg |
+| Offload | File ≥ helperOffloadMinMB (mặc định 200MB) → Helper đĩa |
+| Domain rules | Options: `host\|mode` (helper/accelerate/…) |
 | Grabber | Network sniffer + `Cmd/Ctrl+Shift+Y` |
 | Hàng đợi / lịch | Ưu tiên, batch, schedule |
-| Manager | Tìm kiếm, phân loại, options, xuất JSON |
 
 ## Cài đặt
 
@@ -34,9 +39,11 @@ Sau khi cập nhật code: bấm **Reload** trên card extension.
 
 | Phím | Việc |
 |------|------|
+| `Alt+Shift+S` | Intent Capture — tải đang phát |
 | `Alt+Shift+D` | Mở Manager |
 | `Alt+Shift+A` | Mở tab Batch URL |
-| `Ctrl+Shift+Y` (trên trang web) | Mở grabber |
+| `Ctrl+Shift+Y` (trên trang) | Mở grabber |
+| `Ctrl+Shift+D` (trên trang) | Intent Capture nhanh |
 | `Alt+click` link tệp | Thêm vào hàng đợi |
 
 ## Xem trước UI

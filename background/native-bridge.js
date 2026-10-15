@@ -2,18 +2,12 @@
  * Bridge to PulseDM native host (com.pulsedm.host).
  */
 
+import { isHelperSiteUrl as domainHelperSite } from "../lib/domain-rules.js";
+
 export const NATIVE_HOST = "com.pulsedm.host";
 
-const SITE_HOST_RE =
-  /(^|\.)(youtube\.com|youtu\.be|facebook\.com|fb\.watch|fb\.com|instagram\.com|tiktok\.com|x\.com|twitter\.com|vimeo\.com)$/i;
-
 export function isHelperSiteUrl(url) {
-  try {
-    const host = new URL(url).hostname;
-    return SITE_HOST_RE.test(host);
-  } catch {
-    return false;
-  }
+  return domainHelperSite(url);
 }
 
 export function probeNativeHost() {
@@ -46,7 +40,7 @@ export function probeNativeHost() {
       finish({
         ok: false,
         connected: false,
-        error: "Native host timeout — chạy install-mac.sh với Extension ID",
+        error: "Native host timeout — chạy install script với Extension ID",
       });
     }, 4000);
 
@@ -99,7 +93,7 @@ export function startNativeJob(payload, onEvent) {
 
   port.onMessage.addListener((msg) => {
     onEvent?.(msg);
-    if (msg?.type === "done" || msg?.type === "error") {
+    if (msg?.type === "done" || msg?.type === "error" || msg?.type === "cancelled") {
       try {
         port.disconnect();
       } catch {
@@ -128,10 +122,19 @@ export function startNativeJob(payload, onEvent) {
     connections: payload.connections,
     engine: payload.engine || "auto",
     ytdlpArgs: payload.ytdlpArgs,
+    headers: payload.headers || {},
+    referrer: payload.referrer || "",
+    path: payload.path,
+    reveal: payload.reveal,
   });
 
   return {
     cancel() {
+      try {
+        port.postMessage({ type: "cancel", jobId: payload.jobId });
+      } catch {
+        /* ignore */
+      }
       try {
         port.disconnect();
       } catch {
@@ -139,4 +142,84 @@ export function startNativeJob(payload, onEvent) {
       }
     },
   };
+}
+
+/** Open or reveal a file path via native host. */
+export function openNativePath(path, reveal = false) {
+  return new Promise((resolve) => {
+    let port;
+    try {
+      port = chrome.runtime.connectNative(NATIVE_HOST);
+    } catch (e) {
+      resolve({ ok: false, error: e?.message || String(e) });
+      return;
+    }
+    const timer = setTimeout(() => {
+      try {
+        port.disconnect();
+      } catch {
+        /* ignore */
+      }
+      resolve({ ok: false, error: "timeout" });
+    }, 5000);
+    port.onMessage.addListener((msg) => {
+      clearTimeout(timer);
+      try {
+        port.disconnect();
+      } catch {
+        /* ignore */
+      }
+      resolve(msg?.ok ? { ok: true, path } : { ok: false, error: msg?.error || "fail" });
+    });
+    port.onDisconnect.addListener(() => {
+      clearTimeout(timer);
+    });
+    try {
+      port.postMessage({
+        type: reveal ? "reveal-path" : "open-path",
+        path,
+        reveal,
+      });
+    } catch (e) {
+      clearTimeout(timer);
+      resolve({ ok: false, error: e?.message || String(e) });
+    }
+  });
+}
+
+/** Remux .ts → .mp4 via ffmpeg on host. */
+export function remuxNativePath(path) {
+  return new Promise((resolve) => {
+    let port;
+    try {
+      port = chrome.runtime.connectNative(NATIVE_HOST);
+    } catch (e) {
+      resolve({ ok: false, error: e?.message || String(e) });
+      return;
+    }
+    const timer = setTimeout(() => {
+      try {
+        port.disconnect();
+      } catch {
+        /* ignore */
+      }
+      resolve({ ok: false, error: "timeout" });
+    }, 120000);
+    port.onMessage.addListener((msg) => {
+      clearTimeout(timer);
+      try {
+        port.disconnect();
+      } catch {
+        /* ignore */
+      }
+      if (msg?.type === "done" && msg.ok) resolve({ ok: true, ...msg });
+      else resolve({ ok: false, error: msg?.error || "remux fail" });
+    });
+    try {
+      port.postMessage({ type: "remux", path });
+    } catch (e) {
+      clearTimeout(timer);
+      resolve({ ok: false, error: e?.message || String(e) });
+    }
+  });
 }

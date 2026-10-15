@@ -9,61 +9,80 @@
   <body>
     <header class="top">
       <div class="brand">
-        <img src="../icons/icon32.png" alt="" width="22" height="22" />
+        <img src="../icons/icon32.png" alt="" width="20" height="20" />
         <span>PulseDM</span>
       </div>
-      <div class="top-links">
+      <div class="top-right">
+        <div class="live-pill" title="Tốc độ tải live">
+          <span id="netLiveSpeed">0 B/s</span>
+          <button type="button" id="probeNetBtn" class="live-probe">Đo</button>
+        </div>
         <button id="openManager" class="linkish" type="button">Manager</button>
         <button id="openOptions" class="linkish" type="button">Cài đặt</button>
       </div>
     </header>
 
+    <section class="hero">
+      <button type="button" id="intentBtn" class="intent-btn">Tải đang phát</button>
+      <p id="intentHint" class="intent-hint">Phát video trên tab, rồi bấm nút này</p>
+      <div id="intentQualities" class="intent-qualities" hidden>
+        <select id="qualitySelect" aria-label="Chất lượng"></select>
+        <button type="button" id="intentConfirm" class="intent-confirm">Tải bản này</button>
+      </div>
+    </section>
+
     <form id="addForm" class="add">
       <input
         id="urlInput"
         type="url"
-        placeholder="Dán URL tệp để tải…"
+        placeholder="Dán URL…"
         autocomplete="off"
         required
       />
       <button type="submit" id="addBtn">Tải</button>
     </form>
 
-    <div class="quick">
-      <button type="button" id="batchBtn" class="chip">Batch URL</button>
-      <button type="button" id="pasteBtn" class="chip">Dán & tải</button>
-      <button type="button" id="refreshMedia" class="chip">Quét media</button>
-      <button type="button" id="helperPageBtn" class="chip accent">Tải tab (Helper)</button>
+    <div class="tools">
+      <button type="button" id="pasteBtn" class="tool">Dán</button>
+      <button type="button" id="refreshMedia" class="tool">Quét</button>
+      <button type="button" id="helperPageBtn" class="tool">Helper</button>
+      <button type="button" id="batchBtn" class="tool">Batch</button>
     </div>
 
-    <div id="helperBar" class="helper-bar">
-      Helper: <span id="helperStatus">đang kiểm tra…</span>
-      <button type="button" id="copyInstall" class="linkish">Copy lệnh cài</button>
+    <div id="helperBar" class="status-line">
+      <span class="dot" id="helperDot"></span>
+      <span id="helperStatus">Helper…</span>
+      <button type="button" id="copyInstall" class="linkish sm" title="Copy lệnh Terminal/PowerShell">Copy</button>
+      <button type="button" id="downloadInstall" class="linkish sm" title="Tải script — lưu vào native-host rồi chạy">Script</button>
     </div>
+    <p id="extIdLine" class="probe-line" hidden></p>
 
-    <section class="media-box">
+    <p id="netProbeResult" class="probe-line" hidden></p>
+
+    <section class="media-box" id="mediaBox" hidden>
       <div class="media-head">
-        <strong>Media tab hiện tại</strong>
-        <button type="button" id="dlAllMedia" class="linkish">Tải tất cả</button>
+        <strong>Media trên tab</strong>
+        <button type="button" id="dlAllMedia" class="linkish sm">Tải hết</button>
       </div>
       <ul id="mediaList" class="media-list"></ul>
-      <p id="mediaEmpty" class="media-empty">
-        Phát video trên trang rồi bấm Quét media (hoặc Cmd/Ctrl+Shift+Y).
-      </p>
+      <p id="mediaEmpty" class="media-empty" hidden></p>
     </section>
 
-    <div id="stats" class="stats">
+    <div class="queue-head">
       <span id="statActive">0 đang tải</span>
-      <span id="statSpeed">0 B/s</span>
+      <span id="netLiveMbps" class="muted">0 Mbps</span>
     </div>
+    <!-- kept for net meter JS (hidden bar) -->
+    <div id="netBarFill" hidden></div>
+    <div id="netSpark" hidden></div>
 
     <ul id="list" class="list" aria-live="polite"></ul>
-    <p id="empty" class="empty">Chưa có tải xuống.</p>
+    <p id="empty" class="empty">Chưa có tải. Dùng “Tải đang phát” hoặc dán URL.</p>
 
     <footer class="foot">
       <label class="toggle">
         <input type="checkbox" id="captureToggle" />
-        Bắt tải của trình duyệt
+        Bắt tải trình duyệt
       </label>
     </footer>
 

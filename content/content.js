@@ -80,6 +80,58 @@
       }));
   }
 
+  /** Intent Capture: snapshot of players currently on the page */
+  function collectPlayingProbes() {
+    const probes = [];
+    const media = document.querySelectorAll("video, audio");
+    for (const el of media) {
+      let currentSrc = "";
+      try {
+        currentSrc = el.currentSrc || el.src || "";
+      } catch {
+        currentSrc = "";
+      }
+      const sources = [];
+      el.querySelectorAll("source[src]").forEach((s) => {
+        if (s.src) sources.push(s.src);
+      });
+      if (currentSrc) sources.unshift(currentSrc);
+      const playing =
+        !el.paused && !el.ended && (el.readyState || 0) >= 2 && !el.ended;
+      const httpSrc = /^https?:/i.test(currentSrc) ? currentSrc : "";
+      const isBlob =
+        !httpSrc &&
+        (/^blob:/i.test(currentSrc) ||
+          /^mediasource:/i.test(currentSrc) ||
+          !currentSrc);
+      probes.push({
+        tag: el.tagName.toLowerCase(),
+        currentSrc: httpSrc || currentSrc || "",
+        isBlob,
+        sources: [...new Set(sources)].filter((u) => /^https?:/i.test(u)),
+        playing,
+        paused: Boolean(el.paused),
+        ended: Boolean(el.ended),
+        currentTime: Number(el.currentTime) || 0,
+        duration: Number(el.duration) || 0,
+        videoWidth: Number(el.videoWidth) || 0,
+        videoHeight: Number(el.videoHeight) || 0,
+        readyState: Number(el.readyState) || 0,
+        muted: Boolean(el.muted),
+        pageUrl: location.href,
+        pageTitle: document.title || "",
+        kind:
+          el.tagName.toLowerCase() === "audio"
+            ? "audio"
+            : /\.m3u8/i.test(currentSrc)
+              ? "hls"
+              : "video",
+        filename: currentSrc ? guessName(currentSrc) : document.title || "media",
+      });
+    }
+    return probes;
+  }
+
   function sendDownload(url) {
     chrome.runtime.sendMessage({
       type: "add-download",
@@ -156,9 +208,9 @@
       </div>
       <div class="body">${list}</div>
       <div class="foot">
-        <button class="primary" data-act="all" ${items.length ? "" : "disabled"}>Tải tất cả</button>
+        <button class="primary" data-act="intent">Tải đang phát</button>
+        <button class="ghost" data-act="all" ${items.length ? "" : "disabled"}>Tải tất cả</button>
         <button class="ghost" data-act="refresh">Quét lại</button>
-        <button class="ghost" data-act="manager">Manager</button>
         <button class="ghost" data-act="close">Ẩn</button>
       </div>
     `;
@@ -177,6 +229,19 @@
       }
       if (act === "refresh") {
         openGrabber();
+        return;
+      }
+      if (act === "intent") {
+        chrome.runtime.sendMessage({ type: "intent-capture", qualityId: "auto" }, (res) => {
+          if (chrome.runtime.lastError) {
+            toast("Không gọi được PulseDM");
+            return;
+          }
+          if (res?.error) toast(res.error);
+          else toast(res?.message || "Đã xếp hàng — Intent Capture");
+          root.innerHTML = "";
+          panel = null;
+        });
         return;
       }
       if (act === "all") {
@@ -252,7 +317,7 @@
     attributeFilter: ["src", "href"],
   });
 
-  chrome.runtime.onMessage.addListener((msg) => {
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === "tab-media-updated") {
       lastNetworkItems = msg.items || [];
       if (panel) {
@@ -269,6 +334,28 @@
       return;
     }
     if (msg?.type === "open-grabber") openGrabber();
+    if (msg?.type === "probe-intent-dom") {
+      reportDom();
+      sendResponse({
+        probes: collectPlayingProbes(),
+        dom: collectDomMedia(),
+        pageUrl: location.href,
+        pageTitle: document.title || "",
+      });
+      return true;
+    }
+  });
+
+  document.addEventListener("keydown", (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (!(mod && e.shiftKey && (e.key === "D" || e.key === "d"))) return;
+    // Ctrl/Cmd+Shift+D — Intent Capture (download what's playing)
+    if (e.target?.closest?.("input, textarea, [contenteditable]")) return;
+    e.preventDefault();
+    chrome.runtime.sendMessage({ type: "intent-capture", qualityId: "auto" }, (res) => {
+      if (chrome.runtime.lastError) return;
+      toast(res?.error || res?.message || "Intent Capture");
+    });
   });
 
   // Periodic DOM report while videos play
